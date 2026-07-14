@@ -18,15 +18,15 @@ def generate_html_file_action(html_str, unique_id, export_path=None):
         if base_path.suffix:
             output_file = base_path
         else:
-            output_file = base_path / f'jaxtrace_graph_{unique_id}.html'
+            output_file = base_path / f'jaxviz_graph_{unique_id}.html'
     else:
-        output_file = Path.cwd() / f'jaxtrace_graph_{unique_id}.html'
+        output_file = Path.cwd() / f'jaxviz_graph_{unique_id}.html'
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(html_str, encoding='utf-8')
     resolved_output = output_file.resolve()
     display(HTML(f"""
-        <div id="jaxtrace-container-{unique_id}" style="font-family: Arial, sans-serif; margin: 12px 0;">
+        <div id="jaxviz-container-{unique_id}" style="font-family: Arial, sans-serif; margin: 12px 0;">
             <div style="font-size: 14px; color: #333;">
                 <b>Saved as <code>{resolved_output}</code></b>
             </div>
@@ -42,11 +42,11 @@ def plot_graph(adj_list, module_info, func_info, node_to_module_path,
                height, width, export_format, show_module_attr_names,
                repeat_containers, show_modular_view=False, export_path=None):
     unique_id = str(uuid.uuid4())
-    template_str = resources.read_text('jaxtrace.templates', 'graph.html')
-    d3_source = resources.read_text('jaxtrace.assets', 'd3.min.js')
-    viz_source = resources.read_text('jaxtrace.assets', 'viz-standalone.js')
-    jsoneditor_css = resources.read_text('jaxtrace.assets', 'jsoneditor-10.2.0.min.css')
-    jsoneditor_source = resources.read_text('jaxtrace.assets', 'jsoneditor-10.2.0.min.js')
+    template_str = resources.read_text('jaxviz.templates', 'graph.html')
+    d3_source = resources.read_text('jaxviz.assets', 'd3.min.js')
+    viz_source = resources.read_text('jaxviz.assets', 'viz-standalone.js')
+    jsoneditor_css = resources.read_text('jaxviz.assets', 'jsoneditor-10.2.0.min.css')
+    jsoneditor_source = resources.read_text('jaxviz.assets', 'jsoneditor-10.2.0.min.js')
 
     template = Template(template_str)
 

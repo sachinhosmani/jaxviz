@@ -11,9 +11,9 @@ each module type's ``__call__`` so that calling a submodule pushes a
 branches on ``id(self)`` to give each instance its own name; scopes then nest
 naturally as calls nest.
 
-    from jaxtrace.adapters.nnx import named_scopes
+    from jaxviz.adapters.nnx import named_scopes
     with named_scopes(model):
-        jaxtrace.trace_model(lambda x: model(x), x)
+        jaxviz.trace_model(lambda x: model(x), x)
 
 NNX caches its traced call per model instance, so trace a fresh model instance
 inside the context rather than one that has already been traced without scopes.

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='jaxtrace',
+    name='jaxviz',
     version='0.1.0',
     packages=find_packages(),
     include_package_data=True,
@@ -14,11 +14,11 @@ setup(
     },
     python_requires='>=3.9',
     package_data={
-        'jaxtrace': ['templates/*.html', 'assets/*'],
+        'jaxviz': ['templates/*.html', 'assets/*'],
     },
     description="Interactive JAX model forward-pass visualizer for notebooks",
     long_description=(
-        "jaxtrace displays an interactive graph of the forward pass of a JAX model "
+        "jaxviz displays an interactive graph of the forward pass of a JAX model "
         "directly in the notebook with a single line of code. The computation graph is "
         "obtained from the model's jaxpr and rendered as a draggable, zoomable, "
         "collapsible graph with tensor shapes on every edge."

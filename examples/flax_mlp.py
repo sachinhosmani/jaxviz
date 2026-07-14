@@ -1,9 +1,11 @@
-"""Visualize a Flax Linen MLP's forward pass."""
+"""Flax Linen MLP.
+
+Exposes ``model`` (the callable to trace) and ``example_input`` for the examples
+generator.
+"""
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
-
-import jaxtrace
 
 
 class MLP(nn.Module):
@@ -15,14 +17,10 @@ class MLP(nn.Module):
         return x
 
 
-def main():
-    model = MLP()
-    x = jnp.ones((1, 8))
-    params = model.init(jax.random.PRNGKey(0), x)
-
-    jaxtrace.trace_model(lambda x: model.apply(params, x), x,
-                         export_path="flax_mlp_graph.html")
+_mlp = MLP()
+example_input = jnp.ones((1, 8))
+_params = _mlp.init(jax.random.PRNGKey(0), example_input)
 
 
-if __name__ == "__main__":
-    main()
+def model(x):
+    return _mlp.apply(_params, x)

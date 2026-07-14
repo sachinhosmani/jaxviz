@@ -1,13 +1,13 @@
-"""Visualize a Flax NNX MLP's forward pass.
+"""Flax NNX MLP.
 
-NNX does not emit named scopes, so the graph is flat by default. The nnx adapter
-injects scopes so that submodules render as nested containers.
+NNX emits no named scopes, so ``trace_context`` wraps tracing in ``named_scopes``
+to produce a nested graph. Exposes ``model``, ``example_input`` and
+``trace_context`` for the examples generator.
 """
 import jax.numpy as jnp
 from flax import nnx
 
-import jaxtrace
-from jaxtrace.adapters.nnx import named_scopes
+from jaxviz.adapters.nnx import named_scopes
 
 
 class MLP(nnx.Module):
@@ -22,13 +22,10 @@ class MLP(nnx.Module):
         return x
 
 
-def main():
-    x = jnp.ones((1, 8))
-    model = MLP(nnx.Rngs(0))
-    with named_scopes(model):
-        jaxtrace.trace_model(lambda x: model(x), x,
-                             export_path="flax_nnx_mlp_graph.html")
+_mlp = MLP(nnx.Rngs(0))
+example_input = jnp.ones((1, 8))
+trace_context = named_scopes(_mlp)
 
 
-if __name__ == "__main__":
-    main()
+def model(x):
+    return _mlp(x)

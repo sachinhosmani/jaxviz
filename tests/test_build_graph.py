@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
-from jaxtrace.jaxpr_to_graph import build_graph
+from jaxviz.jaxpr_to_graph import build_graph
 
 
 class MLP(nn.Module):

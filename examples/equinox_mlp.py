@@ -1,9 +1,11 @@
-"""Visualize an Equinox MLP's forward pass."""
+"""Equinox MLP.
+
+Exposes ``model`` (the callable to trace) and ``example_input`` for the examples
+generator.
+"""
 import jax
 import jax.numpy as jnp
 import equinox as eqx
-
-import jaxtrace
 
 
 class MLP(eqx.Module):
@@ -20,11 +22,9 @@ class MLP(eqx.Module):
         return self.l2(x)
 
 
-def main():
-    model = MLP(jax.random.PRNGKey(0))
-    x = jnp.ones((8,))
-    jaxtrace.trace_model(lambda x: model(x), x, export_path="equinox_mlp_graph.html")
+_mlp = MLP(jax.random.PRNGKey(0))
+example_input = jnp.ones((8,))
 
 
-if __name__ == "__main__":
-    main()
+def model(x):
+    return _mlp(x)

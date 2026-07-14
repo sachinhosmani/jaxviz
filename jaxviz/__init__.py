@@ -1,10 +1,10 @@
-"""jaxtrace: interactive forward-pass visualization for JAX models.
+"""jaxviz: interactive forward-pass visualization for JAX models.
 
 The computation graph is obtained from ``jax.make_jaxpr`` and converted into the
 data structures rendered by the bundled interactive frontend.
 
-    import jaxtrace
-    jaxtrace.trace_model(fn, x)   # fn: a traceable callable, x: example input(s)
+    import jaxviz
+    jaxviz.trace_model(fn, x)   # fn: a traceable callable, x: example input(s)
 """
 import jax
 
