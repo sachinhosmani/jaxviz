@@ -1,7 +1,7 @@
 """Equinox MLP.
 
-Exposes ``model`` (the callable to trace) and ``example_input`` for the examples
-generator.
+Exposes ``model`` (the module, which is callable) and ``example_input`` for the
+examples generator.
 """
 import jax
 import jax.numpy as jnp
@@ -22,9 +22,5 @@ class MLP(eqx.Module):
         return self.l2(x)
 
 
-_mlp = MLP(jax.random.PRNGKey(0))
+model = MLP(jax.random.PRNGKey(0))
 example_input = jnp.ones((8,))
-
-
-def model(x):
-    return _mlp(x)

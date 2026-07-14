@@ -6,6 +6,8 @@ data structures rendered by the bundled interactive frontend.
     import jaxviz
     jaxviz.trace_model(fn, x)   # fn: a traceable callable, x: example input(s)
 """
+import contextlib
+
 import jax
 
 from .enums import ExportFormat
@@ -15,13 +17,34 @@ from .render import plot_graph, validate_export_format
 __all__ = ["trace_model", "ExportFormat"]
 
 
+def _module_scope_context(fn):
+    """Return a context manager that adds module nesting for object-based models
+    that do not emit named scopes on their own.
+
+    Flax NNX modules are plain objects and produce a flat jaxpr; passing the module
+    directly lets us walk it and inject ``jax.named_scope``s so submodules render as
+    nested containers. Anything else (Flax Linen closures, raw functions) is traced
+    unchanged.
+    """
+    try:
+        from flax import nnx
+    except ImportError:
+        return contextlib.nullcontext()
+
+    if isinstance(fn, nnx.Module):
+        from .adapters.nnx import named_scopes
+        return named_scopes(fn)
+    return contextlib.nullcontext()
+
+
 def trace_model(fn, *example_args, collapse_modules_after_depth=1, height=800,
                 width=None, export_format=None, export_path=None):
-    """Trace a JAX function and render its forward pass as an interactive graph.
+    """Trace a JAX model and render its forward pass as an interactive graph.
 
     Args:
-        fn: A callable that will be traced with ``jax.make_jaxpr``. For a Flax
-            model this is typically ``lambda x: model.apply(params, x)``.
+        fn: The model to trace. Pass a Flax NNX module directly to get module
+            nesting automatically; for Flax Linen pass ``lambda x: model.apply(params, x)``;
+            any callable works and is traced with ``jax.make_jaxpr``.
         *example_args: Example inputs (arrays / pytrees) with the right shapes.
         collapse_modules_after_depth: Nesting depth beyond which modules start collapsed.
         height, width: Rendered graph size in pixels.
@@ -33,7 +56,8 @@ def trace_model(fn, *example_args, collapse_modules_after_depth=1, height=800,
     else:
         export_format = validate_export_format(export_format)
 
-    closed_jaxpr = jax.make_jaxpr(fn)(*example_args)
+    with _module_scope_context(fn):
+        closed_jaxpr = jax.make_jaxpr(fn)(*example_args)
     blobs = build_graph(closed_jaxpr)
 
     return plot_graph(
