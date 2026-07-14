@@ -125,11 +125,21 @@ def build_graph(closed_jaxpr):
             graph_node_name_to_without_suffix[cid] = without
             module_info[cid] = {"type": without, "parameters": {}, "attributes": {}}
 
-    def add_edge(src_node, dst_node, aval):
+    seen_edges = set()
+
+    def add_edge(src_node, dst_node, var):
+        # edge_data_id identifies the *tensor* (the jaxpr Var, shared across all its
+        # uses), so the frontend can merge edges carrying the same tensor into a
+        # collapsed container while keeping distinct tensors separate.
+        edge_data_id = id(var)
+        edge_key = (src_node, dst_node, edge_data_id)
+        if edge_key in seen_edges:
+            return
+        seen_edges.add(edge_key)
         adj_list[src_node]["edges"].append({
             "target": dst_node,
-            "dims": _shape_str(aval),
-            "edge_data_id": f"{src_node}->{dst_node}",
+            "dims": _shape_str(var.aval),
+            "edge_data_id": edge_data_id,
         })
 
     # --- Inputs: the jaxpr's invars are the real function arguments ---
@@ -187,7 +197,7 @@ def build_graph(closed_jaxpr):
             if src is None:
                 continue
             maybe_assign_param_scope(src, container_ids)
-            add_edge(src, node, invar.aval)
+            add_edge(src, node, invar)
 
         # Params of the op (dimension_numbers etc.) shown on click
         func_info[node] = {
@@ -213,7 +223,7 @@ def build_graph(closed_jaxpr):
             continue
         src = var_to_source.get(outvar)
         if src is not None:
-            add_edge(src, node, outvar.aval)
+            add_edge(src, node, outvar)
 
     ancestor_map = build_immediate_ancestor_map(node_to_ancestors, adj_list)
 
