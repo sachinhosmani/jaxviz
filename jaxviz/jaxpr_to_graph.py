@@ -86,12 +86,39 @@ def _pretty_primitive_name(eqn):
     return eqn.primitive.name
 
 
-def build_graph(closed_jaxpr):
+def _const_value(val):
+    """Unwrap a constant scalar to a plain Python value for the click-info popup."""
+    try:
+        return val.item() if hasattr(val, "item") else val
+    except Exception:
+        return str(val)
+
+
+def _format_operand(atom):
+    """Describe a jaxpr operand for the click-info popup: a tensor operand as its
+    shape and dtype, an inline literal as its value.
+    """
+    if isinstance(atom, jax_core.Literal):
+        return _const_value(getattr(atom, "val", None))
+    aval = getattr(atom, "aval", None)
+    return {
+        "_type": "tensor",
+        "shape": list(getattr(aval, "shape", ()) or ()),
+        "dtype": str(getattr(aval, "dtype", "")),
+    }
+
+
+def build_graph(closed_jaxpr, show_constants=False):
     """Walk a ClosedJaxpr and produce the torchvista frontend blobs.
+
+    When ``show_constants`` is True, inline literal operands and scalar closed-over
+    constants are drawn as ``Constant`` nodes; otherwise they are omitted (so ops fed
+    only by constants, e.g. a ``sqrt`` scaling factor, appear without inputs).
 
     Returns a dict of all structures plot_graph expects.
     """
     jaxpr = closed_jaxpr.jaxpr
+    consts = list(getattr(closed_jaxpr, "consts", []))
 
     adj_list = {}
     func_info = {}
@@ -142,6 +169,28 @@ def build_graph(closed_jaxpr):
             "edge_data_id": edge_data_id,
         })
 
+    def add_constant_input(op_node, literals, container_ids):
+        # One Constant node per op, combining that op's inline literal operands
+        # (mirrors torchvista's "N scalars" grouping to avoid clutter). Nodes are
+        # labelled generically; the actual values go in func_info for the click popup.
+        const_node = new_node("const")
+        if len(literals) == 1:
+            label = "scalar"
+            dims = _shape_str(literals[0].aval)
+        else:
+            label = f"{len(literals)} scalars"
+            dims = f"( ) x {len(literals)}"
+        adj_list[const_node] = {"edges": [], "failed": False, "node_type": NodeType.CONSTANT.value}
+        graph_node_display_names[const_node] = label
+        graph_node_name_to_without_suffix[const_node] = "scalar"
+        node_to_ancestors[const_node] = list(container_ids)
+        func_info[const_node] = {"values": [_const_value(getattr(lit, "val", None)) for lit in literals]}
+        adj_list[const_node]["edges"].append({
+            "target": op_node,
+            "dims": dims,
+            "edge_data_id": const_node,
+        })
+
     # --- Inputs: the jaxpr's invars are the real function arguments ---
     for i, var in enumerate(jaxpr.invars):
         node = f"input_{i}"
@@ -151,19 +200,28 @@ def build_graph(closed_jaxpr):
         node_to_ancestors[node] = []
         var_to_source[var] = node
 
-    # --- Params/consts: closed-over arrays (e.g. model weights) ---
+    # --- Closed-over values: arrays are weights (Parameter); scalars are constants ---
     for i, var in enumerate(jaxpr.constvars):
-        node = f"param_{i}"
-        adj_list[node] = {"edges": [], "failed": False, "node_type": NodeType.PARAMETER.value}
-        graph_node_display_names[node] = "param"
-        graph_node_name_to_without_suffix[node] = "param"
+        if show_constants and getattr(var.aval, "shape", ()) == ():
+            node = new_node("const")
+            adj_list[node] = {"edges": [], "failed": False, "node_type": NodeType.CONSTANT.value}
+            val = consts[i] if i < len(consts) else None
+            graph_node_display_names[node] = "scalar"
+            graph_node_name_to_without_suffix[node] = "scalar"
+            func_info[node] = {"value": _const_value(val)}
+        else:
+            node = f"param_{i}"
+            adj_list[node] = {"edges": [], "failed": False, "node_type": NodeType.PARAMETER.value}
+            graph_node_display_names[node] = "param"
+            graph_node_name_to_without_suffix[node] = "param"
         # Ancestors are assigned lazily to the scope of the first consuming eqn,
-        # so weights nest inside the module that uses them.
+        # so weights/constants nest inside the module that uses them.
         node_to_ancestors[node] = []
         var_to_source[var] = node
 
     def maybe_assign_param_scope(src_node, container_ids):
-        if src_node.startswith("param_") and not node_to_ancestors.get(src_node):
+        if (src_node.startswith("param_") or src_node.startswith("const_")) \
+                and not node_to_ancestors.get(src_node):
             node_to_ancestors[src_node] = list(container_ids)
 
     # --- Equations become leaf nodes ---
@@ -189,9 +247,11 @@ def build_graph(closed_jaxpr):
             parent_module_to_depth[cid] = max(depth, parent_module_to_depth.get(cid, 0))
             depth += 1
 
-        # Edges in: connect every non-literal input var to this node
+        # Edges in: connect input vars; gather inline literal operands separately
+        literal_inputs = []
         for invar in eqn.invars:
             if isinstance(invar, jax_core.Literal):
+                literal_inputs.append(invar)
                 continue
             src = var_to_source.get(invar)
             if src is None:
@@ -199,9 +259,12 @@ def build_graph(closed_jaxpr):
             maybe_assign_param_scope(src, container_ids)
             add_edge(src, node, invar)
 
-        # Params of the op (dimension_numbers etc.) shown on click
+        if show_constants and literal_inputs:
+            add_constant_input(node, literal_inputs, container_ids)
+
+        # Click-info: the operands the op was called with, plus its static params.
         func_info[node] = {
-            "positional_args": [],
+            "positional_args": [_format_operand(a) for a in eqn.invars],
             "keyword_args": {k: str(v)[:80] for k, v in eqn.params.items()
                              if k not in ("jaxpr", "call_jaxpr", "branches", "jvp_jaxpr_thunk")},
         }

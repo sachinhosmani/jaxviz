@@ -50,6 +50,22 @@ def test_flat_graph_when_no_named_scopes():
     assert blobs["ancestor_map"] == {}
 
 
+def test_constants_hidden_by_default_shown_when_enabled():
+    # x * 2 has a literal operand: no Constant node by default, one labeled "2.0"
+    # (feeding the multiply) when show_constants=True.
+    closed = jax.make_jaxpr(lambda x: jnp.sum(x * 2))(jnp.ones((4,)))
+
+    off = build_graph(closed, show_constants=False)
+    assert not any(d["node_type"] == "Constant" for d in off["adj_list"].values())
+
+    on = build_graph(closed, show_constants=True)
+    const_nodes = [n for n, d in on["adj_list"].items() if d["node_type"] == "Constant"]
+    assert const_nodes
+    # Labelled generically; the actual value lives in func_info for the click popup.
+    assert on["graph_node_display_names"][const_nodes[0]] == "scalar"
+    assert 2.0 in on["func_info"][const_nodes[0]]["values"]
+
+
 def test_reused_tensor_shares_edge_data_id():
     # A tensor consumed by several ops yields edges with the same edge_data_id, so a
     # collapsed container can merge them into a single edge (distinct targets remain

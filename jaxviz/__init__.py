@@ -38,7 +38,8 @@ def _module_scope_context(fn):
 
 
 def trace_model(fn, *example_args, collapse_modules_after_depth=1, height=800,
-                width=None, export_format=None, export_path=None):
+                width=None, export_format=None, export_path=None,
+                show_constants=False):
     """Trace a JAX model and render its forward pass as an interactive graph.
 
     Args:
@@ -50,6 +51,8 @@ def trace_model(fn, *example_args, collapse_modules_after_depth=1, height=800,
         height, width: Rendered graph size in pixels.
         export_format: None (inline display) or one of 'html'/'png'/'svg'.
         export_path: Optional path for HTML export.
+        show_constants: Draw inline literal operands and scalar constants as
+            Constant nodes (off by default to keep the graph uncluttered).
     """
     if export_format is None and export_path is not None:
         export_format = ExportFormat.HTML
@@ -58,7 +61,7 @@ def trace_model(fn, *example_args, collapse_modules_after_depth=1, height=800,
 
     with _module_scope_context(fn):
         closed_jaxpr = jax.make_jaxpr(fn)(*example_args)
-    blobs = build_graph(closed_jaxpr)
+    blobs = build_graph(closed_jaxpr, show_constants=show_constants)
 
     return plot_graph(
         blobs["adj_list"],
