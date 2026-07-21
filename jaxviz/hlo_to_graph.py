@@ -498,6 +498,12 @@ def build_hlo_graph(lowered):
     (ancestor_map, parent_module_to_nodes, parent_module_to_depth,
      module_info, node_to_module_path) = _build_hierarchy(node_modpath, adj_list)
 
+    # A container's display label is its module name (dense1), not its raw id
+    # (mod_MLP_dense1) — mirror what the high-level graph registers.
+    for mid, info in module_info.items():
+        graph_node_display_names[mid] = info["name"]
+        graph_node_name_to_without_suffix[mid] = info["name"]
+
     return {
         "adj_list": adj_list, "module_info": module_info, "func_info": func_info,
         "node_to_module_path": node_to_module_path,
