@@ -17,6 +17,12 @@ from collections import defaultdict
 import jax
 from jax import core as jax_core
 
+try:  # jax >= ~0.5 moved these out of the public jax.core namespace
+    _Literal = jax_core.Literal
+    _DropVar = jax_core.DropVar
+except AttributeError:
+    from jax._src.core import Literal as _Literal, DropVar as _DropVar
+
 from .enums import NodeType
 from .graph_transforms import build_immediate_ancestor_map
 
@@ -98,7 +104,7 @@ def _format_operand(atom):
     """Describe a jaxpr operand for the click-info popup: a tensor operand as its
     shape and dtype, an inline literal as its value.
     """
-    if isinstance(atom, jax_core.Literal):
+    if isinstance(atom, _Literal):
         return _const_value(getattr(atom, "val", None))
     aval = getattr(atom, "aval", None)
     return {
@@ -250,7 +256,7 @@ def build_graph(closed_jaxpr, show_constants=False):
         # Edges in: connect input vars; gather inline literal operands separately
         literal_inputs = []
         for invar in eqn.invars:
-            if isinstance(invar, jax_core.Literal):
+            if isinstance(invar, _Literal):
                 literal_inputs.append(invar)
                 continue
             src = var_to_source.get(invar)
@@ -271,7 +277,7 @@ def build_graph(closed_jaxpr, show_constants=False):
 
         # Outputs: this node produces these vars
         for outvar in eqn.outvars:
-            if isinstance(outvar, jax_core.DropVar):
+            if isinstance(outvar, _DropVar):
                 continue
             var_to_source[outvar] = node
 
@@ -282,7 +288,7 @@ def build_graph(closed_jaxpr, show_constants=False):
         graph_node_display_names[node] = f"output_{i}"
         graph_node_name_to_without_suffix[node] = "output"
         node_to_ancestors[node] = []
-        if isinstance(outvar, jax_core.Literal):
+        if isinstance(outvar, _Literal):
             continue
         src = var_to_source.get(outvar)
         if src is not None:
