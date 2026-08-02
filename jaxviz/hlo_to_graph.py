@@ -66,6 +66,53 @@ def _hlo_shape_parts(shape):
     return dtype, dims
 
 
+def _dims_str(dims):
+    if not dims:
+        return "( )"
+    return "(" + ", ".join(str(d) for d in dims) + ")"
+
+
+def _sharding_tiling(sharding):
+    """Per-dimension split factors from a sharding annotation. '{replicated}' (or
+    none) -> None, meaning global == local. Returns None if it can't be parsed."""
+    if not sharding or "replicated" in sharding:
+        return None
+    m = re.search(r"devices=\[([\d,]+)\]", sharding)
+    if not m:
+        return None
+    tiling = [int(x) for x in m.group(1).split(",")]
+    if "last_tile_dim_replicate" in sharding:
+        tiling = tiling[:-1]   # trailing group is replication, not a data dim
+    return tiling
+
+
+def _global_from_sharding(local_dims, sharding):
+    """Global (unsharded) shape = local shape x the sharding's per-dim tiling."""
+    tiling = _sharding_tiling(sharding)
+    if tiling is None:
+        return list(local_dims)
+    if len(tiling) != len(local_dims):
+        return None
+    return [ld * t for ld, t in zip(local_dims, tiling)]
+
+
+def _local_from_global(global_dims, sharding):
+    """Local (per-device) shape = global shape / the sharding's per-dim tiling.
+    Used to self-check a global shape against the local shape actually rendered:
+    if they don't reconcile, the global is not trusted. Returns None on mismatch."""
+    tiling = _sharding_tiling(sharding)
+    if tiling is None:
+        return list(global_dims)
+    if len(tiling) != len(global_dims):
+        return None
+    out = []
+    for g, t in zip(global_dims, tiling):
+        if t == 0 or g % t:
+            return None
+        out.append(g // t)
+    return out
+
+
 def _parse_scalar_const(literal, dtype):
     """Turn an HLO scalar constant literal into a plain Python value."""
     literal = literal.strip()
@@ -137,7 +184,14 @@ def _unescape(s):
 # --------------------------------------------------------------------------
 # Dump + module selection (unchanged strategy: content-based)
 # --------------------------------------------------------------------------
-def _dump_pre_fusion_hlo_text(lowered):
+def _dump_hlo_stages(lowered):
+    """Compile with dumping and return two stages:
+      * rendered   -- post-partition module: per-device (local) shapes + the
+                      inserted collectives (this is the graph we draw);
+      * propagated -- post sharding-propagation, pre-partition module: every op's
+                      GLOBAL shape + its sharding (source of the global shapes),
+                      or None if that stage isn't available.
+    """
     dump_dir = tempfile.mkdtemp(prefix="jaxviz_hlo_")
     lowered.compile(compiler_options={
         "xla_dump_to": dump_dir,
@@ -153,12 +207,71 @@ def _dump_pre_fusion_hlo_text(lowered):
     candidates = [p for p in sorted(glob.glob(os.path.join(dump_dir, "*.txt"))) if is_module(p)]
     with_coll = [p for p in candidates if coll.search(open(p).read())]
     if with_coll:
-        chosen = with_coll[0]
+        rendered = with_coll[0]
     elif candidates:
-        chosen = candidates[-1]
+        rendered = candidates[-1]
     else:
         raise RuntimeError(f"No HLO dump produced in {dump_dir}")
-    return open(chosen).read()
+
+    # last module before partitioning == fully sharding-propagated, still global
+    propagated = None
+    for p in candidates:
+        if "before_spmd-partitioning" in os.path.basename(p):
+            propagated = p
+    return open(rendered).read(), (open(propagated).read() if propagated else None)
+
+
+def _build_global_index(propagated_text):
+    """From the post-propagation stage, map (line, col, opcode) -> list of
+    (global_shape, sharding). Keyed by source location + opcode so it can be
+    joined to the rendered graph and self-checked against the local shape."""
+    if not propagated_text:
+        return {}
+    sfi = _StackFrameIndex(propagated_text)
+    ufiles = {f for f in sfi.files.values()
+              if not f.startswith("<") and "site-packages" not in f
+              and "dist-packages" not in f}
+    _, body = _entry_block(propagated_text)
+    index = {}
+    for ln in body:
+        m = _INSTR_RE.match(ln)
+        if not m or m.group(3) == "parameter":
+            continue
+        _, opcode, shape, rest = m.group(1), m.group(3), m.group(2), m.group(4)
+        _, gdims = _hlo_shape_parts(shape)
+        shm = _SHARDING_RE.search(ln)
+        sharding = shm.group(1) if shm else None
+        loc = None
+        if sid := _STACK_ID_RE.search(ln):
+            for f, fn, l, c in sfi.resolve(int(sid.group(1))):
+                if f in ufiles:
+                    loc = (l, c)
+                    break
+        if loc is not None:
+            index.setdefault((loc[0], loc[1], opcode), []).append((tuple(gdims), sharding))
+    return index
+
+
+def _propagated_output(propagated_text):
+    """Global shape + sharding of the model's output, from the post-propagation
+    stage's ROOT (its output IS the function's recorded result). Returns
+    (global_shape, sharding) for a single-array output, else None."""
+    if not propagated_text:
+        return None
+    _, body = _entry_block(propagated_text)
+    for ln in body:
+        if not ln.lstrip().startswith("ROOT"):
+            continue
+        m = _INSTR_RE.match(ln)
+        if not m:
+            return None
+        shape = m.group(2)
+        if shape.strip().startswith("("):   # tuple output -> not handled here
+            return None
+        _, gdims = _hlo_shape_parts(shape)
+        shm = _SHARDING_RE.search(ln)
+        return (tuple(gdims), shm.group(1) if shm else None)
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -333,7 +446,9 @@ def _module_path_from_frames(frames, src, user_files):
 # Main
 # --------------------------------------------------------------------------
 def build_hlo_graph(lowered):
-    text = _dump_pre_fusion_hlo_text(lowered)
+    text, propagated = _dump_hlo_stages(lowered)
+    global_index = _build_global_index(propagated)
+    out_global = _propagated_output(propagated)
     sfi = _StackFrameIndex(text)
     src = _SourceResolver()
     user_files = {f for f in sfi.files.values()
@@ -348,6 +463,7 @@ def build_hlo_graph(lowered):
     node_to_attr_name = {}
     name_to_node, out_shape, pending_edges = {}, {}, []
     const_values = {}  # node_id -> raw scalar value (for scalar constants)
+    node_global = {}   # node_id -> global (logical) output shape, when known
     node_modpath = {}  # node_id -> list[str] (outermost first) or []
 
     def add_node(node_id, node_type, label, without=None):
@@ -414,6 +530,11 @@ def build_hlo_graph(lowered):
         func_info[node_id] = {"positional_args": [], "keyword_args": {}}
         name_to_node[pname] = node_id
         out_shape[node_id] = pshape
+        # global (unsharded) shape from local x the sharding tiling
+        _, local_dims = _hlo_shape_parts(pshape)
+        g = _global_from_sharding(local_dims, sharding)
+        if g is not None:
+            node_global[node_id] = g
 
     # ---- pass 2: instructions ----
     root_name = None
@@ -460,14 +581,51 @@ def build_hlo_graph(lowered):
         # (dense0/dense1, via self.<attr>) + op_name scope (relu). All from
         # first-party metadata; anything unresolved is simply omitted.
         sub_path = []
+        node_loc = None
         if sid_m := _STACK_ID_RE.search(ln):
             frames = sfi.resolve(int(sid_m.group(1)))
             sub_path = _module_path_from_frames(frames, src, user_files)
+            for f, fn, l, c in frames:
+                if f in user_files:
+                    node_loc = (l, c)
+                    break
+
+        # Global shape from the post-propagation stage, joined by (line, col, opcode)
+        # and SELF-CHECKED: keep it only if global / sharding == the local shape we
+        # render. Collectives have no counterpart there, so they get nothing (right).
+        if node_loc is not None:
+            _, local_dims = _hlo_shape_parts(shape)
+            verified = set()
+            for gdims, gsharding in global_index.get((node_loc[0], node_loc[1], opcode), []):
+                expected = _local_from_global(gdims, gsharding)
+                if expected is not None and list(expected) == list(local_dims):
+                    verified.add(tuple(gdims))
+            if len(verified) == 1:
+                node_global[node_id] = list(next(iter(verified)))
+
         scope_path = _opname_scopes(op_name, wrapper)
         node_modpath[node_id] = root_prefix + sub_path + scope_path
 
         if ln.lstrip().startswith("ROOT"):
             root_name = name
+
+    def _edge(src_node, dst_node):
+        # An edge carries a tensor; show its per-device (local) size and, explicitly,
+        # its full (global) size: the real size when sharded, "same" when replicated,
+        # or "n/a" when we can't recover it — never a silent omission.
+        local_str = _hlo_shape_to_dims(out_shape.get(src_node, ""))
+        _, local_dims = _hlo_shape_parts(out_shape.get(src_node, ""))
+        g = node_global.get(src_node)
+        edge = {"target": dst_node, "edge_data_id": f"{src_node}->{dst_node}"}
+        if g is None:
+            edge["dims"] = f"{local_str} · global n/a"
+        elif list(g) == list(local_dims):
+            edge["dims"] = f"{local_str} · global same"
+            edge["global_dims"] = _dims_str(g)
+        else:
+            edge["dims"] = f"{local_str} · global {_dims_str(g)}"
+            edge["global_dims"] = _dims_str(g)
+        return edge
 
     # ---- edges ----
     seen = set()
@@ -478,21 +636,23 @@ def build_hlo_graph(lowered):
         if (src_node, dst_node) in seen:
             continue
         seen.add((src_node, dst_node))
-        adj_list[src_node]["edges"].append({
-            "target": dst_node,
-            "dims": _hlo_shape_to_dims(out_shape.get(src_node, "")),
-            "edge_data_id": f"{src_node}->{dst_node}",
-        })
+        adj_list[src_node]["edges"].append(_edge(src_node, dst_node))
 
     if root_name is not None:
         add_node("output_0", NodeType.OUTPUT.value, "output_0", "output")
         node_modpath["output_0"] = []
         rn = name_to_node[root_name]
-        adj_list[rn]["edges"].append({
-            "target": "output_0",
-            "dims": _hlo_shape_to_dims(out_shape.get(rn, "")),
-            "edge_data_id": f"{rn}->output_0",
-        })
+        # The output tensor's global shape comes from the recorded output interface
+        # (post-propagation ROOT), self-checked against the rendered local shape. This
+        # is why a collective producing the output still yields a global on its output
+        # edge, even though collectives otherwise get none.
+        if out_global is not None and rn not in node_global:
+            gdims, gsharding = out_global
+            expected = _local_from_global(gdims, gsharding)
+            _, root_local = _hlo_shape_parts(out_shape.get(rn, ""))
+            if expected is not None and list(expected) == list(root_local):
+                node_global[rn] = list(gdims)
+        adj_list[rn]["edges"].append(_edge(rn, "output_0"))
 
     # ---- build the module containers from node_modpath ----
     (ancestor_map, parent_module_to_nodes, parent_module_to_depth,

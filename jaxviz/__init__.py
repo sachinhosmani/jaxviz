@@ -46,8 +46,7 @@ def _module_scope_context(fn):
 def _lower_for_hlo(fn, example_args):
     """Lower fn for HLO extraction. For a Flax NNX module the sharded weights must
     be passed as *arguments* (not captured), otherwise they are constant-folded,
-    their sharding is lost, and the compiler inserts no collectives. So we split the
-    module and lower a function that takes its state as a sharded argument."""
+    their sharding is lost, and no collectives are inserted."""
     try:
         from flax import nnx
     except ImportError:
