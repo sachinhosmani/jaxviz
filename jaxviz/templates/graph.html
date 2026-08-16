@@ -252,6 +252,20 @@
             pointer-events: all;
         }
 
+        .edge-label_${unique_id}.has-shape-details_${unique_id} {
+            cursor: help;
+        }
+
+        .edge-shape-info-badge_${unique_id} circle {
+            fill: #6657A8;
+        }
+
+        .edge-shape-info-badge_${unique_id} text {
+            fill: white;
+            font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            pointer-events: none;
+        }
+
         @keyframes containerHighlight {
             0% { 
                 filter: drop-shadow(0 0 0px rgba(255, 215, 0, 0));
@@ -441,6 +455,70 @@
             display: none;
         }
 
+        .shape-comparison-tooltip_${unique_id} {
+            position: absolute;
+            z-index: 1000;
+            display: none;
+            padding: 8px 10px;
+            color: #2f2f2f;
+            background: white;
+            border: 1px solid #c9c9c2;
+            border-radius: 6px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.16);
+            pointer-events: none;
+            transform-origin: top left;
+        }
+
+        .shape-comparison-tooltip_${unique_id} table {
+            border-collapse: collapse;
+            white-space: nowrap;
+        }
+
+        .shape-comparison-tooltip_${unique_id} th {
+            padding: 1px 10px 1px 0;
+            color: #555;
+            font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            text-align: right;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td {
+            padding: 1px 0;
+            font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            text-align: center;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-dimension_${unique_id} {
+            min-width: 24px;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} {
+            height: 30px;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} svg {
+            display: block;
+            margin: 0 auto;
+            overflow: visible;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} line {
+            stroke: #8C80BD;
+            stroke-width: 1.25;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} polygon {
+            fill: #8C80BD;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} rect {
+            fill: white;
+        }
+
+        .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} text {
+            fill: #6657A8;
+            font: 700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
         .edge_${unique_id}.implied-edge_${unique_id} {
             stroke-dasharray: 5,5;
         }
@@ -599,6 +677,127 @@
         positionTooltip(tooltip, buttonElement);
     }
 
+    function appendShapeRow(table, label, dimensions, rowClass = null) {
+        const row = table.insertRow();
+        if (rowClass) row.className = rowClass;
+
+        const heading = document.createElement("th");
+        heading.scope = "row";
+        heading.textContent = label;
+        row.appendChild(heading);
+
+        const addCell = (text, isDimension = false) => {
+            const cell = row.insertCell();
+            cell.textContent = text;
+            if (isDimension) cell.className = "shape-dimension_${unique_id}";
+        };
+
+        addCell(label ? "(" : "");
+        dimensions.forEach((dimension, index) => {
+            addCell(dimension, true);
+            if (index < dimensions.length - 1) addCell(label ? "," : "");
+        });
+        addCell(label ? ")" : "");
+    }
+
+    function appendShapeConnectorRow(table, partitions) {
+        const row = table.insertRow();
+        row.className = "shape-connectors_${unique_id}";
+
+        row.appendChild(document.createElement("th"));
+        row.insertCell();
+
+        partitions.forEach((partitionsForDimension, index) => {
+            const label = `÷${partitionsForDimension}`;
+            const width = Math.max(26, label.length * 7 + 6);
+            const center = width / 2;
+            const cell = row.insertCell();
+            cell.className = "shape-dimension_${unique_id} shape-connector_${unique_id}";
+
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("width", width);
+            svg.setAttribute("height", 30);
+            svg.setAttribute("viewBox", `0 0 ${width} 30`);
+            svg.setAttribute("aria-label", `divide by ${partitionsForDimension}`);
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", center);
+            line.setAttribute("y1", 0);
+            line.setAttribute("x2", center);
+            line.setAttribute("y2", 26);
+            svg.appendChild(line);
+
+            const arrowhead = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            arrowhead.setAttribute(
+                "points",
+                `${center - 3.5},24 ${center + 3.5},24 ${center},30`
+            );
+            svg.appendChild(arrowhead);
+
+            const labelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            labelBackground.setAttribute("x", 1);
+            labelBackground.setAttribute("y", 8);
+            labelBackground.setAttribute("width", width - 2);
+            labelBackground.setAttribute("height", 13);
+            labelBackground.setAttribute("rx", 3);
+            svg.appendChild(labelBackground);
+
+            const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            labelText.setAttribute("x", center);
+            labelText.setAttribute("y", 17.5);
+            labelText.setAttribute("text-anchor", "middle");
+            labelText.textContent = label;
+            svg.appendChild(labelText);
+            cell.appendChild(svg);
+
+            if (index < partitions.length - 1) row.insertCell();
+        });
+
+        row.insertCell();
+    }
+
+    function positionShapeComparison(tooltip, anchorElement, zoomScale) {
+        const container = document.getElementById("graph-container_${unique_id}");
+        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        tooltip.style.left = "0px";
+        tooltip.style.top = "0px";
+        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.display = "block";
+
+        const anchorRect = anchorElement.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const unclampedLeft = anchorRect.left + anchorRect.width / 2
+            - containerRect.left - tooltipRect.width / 2;
+        const maxLeft = Math.max(8, containerRect.width - tooltipRect.width - 8);
+        const left = Math.max(8, Math.min(unclampedLeft, maxLeft));
+        const gap = 8 * scale;
+        let top = anchorRect.top - containerRect.top - tooltipRect.height - gap;
+        if (top < 8) top = anchorRect.bottom - containerRect.top + gap;
+
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+    }
+
+    function showShapeComparison(anchorElement, shapeInfo, zoomScale) {
+        if (!shapeInfo || !hasComparableShapeInfo({shape_info: shapeInfo})) return;
+        removeTooltip();
+
+        const tooltip = document.createElement("div");
+        tooltip.className = "shape-comparison-tooltip_${unique_id}";
+        const table = document.createElement("table");
+        appendShapeRow(table, "global", shapeInfo.global);
+        appendShapeConnectorRow(table, shapeInfo.partitions);
+        appendShapeRow(table, "partitioned", shapeInfo.local);
+        tooltip.appendChild(table);
+
+        const container = document.getElementById("graph-container_${unique_id}");
+        container.appendChild(tooltip);
+        currentTooltip = tooltip;
+        tooltip.shapeAnchorElement = anchorElement;
+        positionShapeComparison(tooltip, anchorElement, zoomScale);
+    }
+
     function removeTooltip() {
         if (currentTooltip) {
             currentTooltip.remove();
@@ -629,6 +828,23 @@
             return `${displayName} (${moduleType})`;
         }
         return displayName;
+    }
+
+    function hasComparableShapeInfo(edge) {
+        const info = edge && edge.shape_info;
+        return Boolean(
+            info &&
+            info.status === "verified" &&
+            Array.isArray(info.global) &&
+            Array.isArray(info.local) &&
+            Array.isArray(info.partitions) &&
+            info.global.length === info.local.length &&
+            info.global.length === info.partitions.length
+        );
+    }
+
+    function edgeLayoutLabel(edge) {
+        return edge.dims;
     }
 
     function extractGraphData(graphData) {
@@ -876,6 +1092,7 @@
                 adj_list_collapsed_nodes[sourceNode].edges.push({
                     target: targetNode,
                     dims: edge.dims,
+                    shape_info: edge.shape_info,
                     edge_data_id: edge.edge_data_id,
                     is_implied_edge: edge.is_implied_edge
                 });
@@ -1119,7 +1336,7 @@
                 if (edge.is_implied_edge) edgeAttrs += `, is_implied_edge="true"`;
 
                 if (show_modular_view) {
-                    edgeAttrs += `, xlabel="${edge.dims}"`;
+                    edgeAttrs += `, xlabel="${edgeLayoutLabel(edge)}"`;
 
                     const hasCompound = repSource !== node || repTarget !== edge.target;
 
@@ -1131,7 +1348,7 @@
                         edgeAttrs += `, minlen=2`;
                     }
                 } else {
-                    edgeAttrs += `, label="${edge.dims}"`;
+                    edgeAttrs += `, label="${edgeLayoutLabel(edge)}"`;
                 }
 
                 edgeAttrs += `]`;
@@ -1370,11 +1587,24 @@
         .style("height", "100%");
 
         const inner = svg.append("g");
+        let shapeTooltipBaseZoom = 1;
 
         // Add zoom behavior
         const zoom = d3.zoom().on("zoom", function(event) {
-            removeTooltip();
             inner.attr("transform", event.transform);
+            if (
+                currentTooltip &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_${unique_id}") &&
+                currentTooltip.shapeAnchorElement
+            ) {
+                positionShapeComparison(
+                    currentTooltip,
+                    currentTooltip.shapeAnchorElement,
+                    event.transform.k / shapeTooltipBaseZoom
+                );
+            } else {
+                removeTooltip();
+            }
             closePopup();
         });
 
@@ -1531,6 +1761,44 @@
         })
         .attr("marker-end", "url(#arrowhead_${unique_id})");
         
+        function drawTextEdgeLabel(labelGroup, edgeData) {
+            const text = labelGroup.append("text")
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "central")
+            .style("font-size", "6pt")
+            .text(edgeData.dims)
+            .attr("stroke", "#f3f3eb")
+            .attr("stroke-width", "3pt")
+            .attr("paint-order", "stroke")
+            .attr("stroke-linejoin", "round");
+
+            const bbox = text.node().getBBox();
+            labelGroup.insert("rect", "text")
+            .attr("x", bbox.x - 2)
+            .attr("y", bbox.y - 2)
+            .attr("rx", 4)
+            .attr("ry", 4)
+            .attr("width", bbox.width + 4)
+            .attr("height", bbox.height + 4)
+            .attr("fill", "rgb(243, 243, 235)")
+            .attr("stroke", "#79797933")
+            .attr("stroke-width", "0.5px");
+
+            if (hasComparableShapeInfo(edgeData)) {
+                labelGroup.classed("has-shape-details_${unique_id}", true);
+                const badgeX = bbox.x + bbox.width + 5;
+                const badge = labelGroup.append("g")
+                .attr("class", "edge-shape-info-badge_${unique_id}")
+                .attr("transform", `translate(${badgeX}, 0)`);
+
+                badge.append("circle").attr("r", 3.2);
+                badge.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "central")
+                .text("i");
+            }
+        }
+
         // Add dimension labels on edges
         edges.each(function(edge) {
             const edgeGroup = d3.select(this);
@@ -1553,39 +1821,14 @@
             if (!edgeData || !edgeData.dims) return;
             
             const pointAtStart = edge.labelPos;
-
-            const angle = 0.0;
+            if (!pointAtStart) return;
             
-            // Create a background for the text
             const labelGroup = edgeGroup.append("g")
             .attr("class", "edge-label_${unique_id}")
-            .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`);
-            
-            const text = labelGroup.append("text")
-            .attr("text-anchor", "middle")
-            .attr("dominant-baseline", "central")
-            .style("font-size", "6pt")
-            .text(edgeData.dims)
-            // .attr("transform", `rotate(${angle})`)
-            .attr("stroke", "#f3f3eb")
-            .attr("stroke-width", "3pt")
-            .attr("paint-order", "stroke")
-            .attr("stroke-linejoin", "round");
+            .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
+            .property("edgeLabelData", edgeData);
 
-            // Add background rectangle
-            const bbox = text.node().getBBox();
-            labelGroup.insert("rect", "text")
-            .attr("x", bbox.x - 2)
-            .attr("y", bbox.y - 2)
-            .attr("rx", 4)
-            .attr("ry", 4)
-            .attr("width", bbox.width + 4)
-            .attr("height", bbox.height + 4)
-            .attr("fill", "rgb(243, 243, 235) ")
-            .attr("stroke", "#79797933")
-            .attr("stroke-width", "0.5px")
-            .attr("fill-opacity", 1.0);
-            // .attr("transform", `rotate(${angle})`);
+            drawTextEdgeLabel(labelGroup, edgeData);
         });
         
 
@@ -1594,56 +1837,31 @@
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
             const labelGroup = edgeGroup.select(".edge-label_${unique_id}");
-            const labelText = labelGroup.select("text");
-            const labelBg = labelGroup.select("rect");
+            const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
-            const originalFontSize = labelText.style("font-size") || "6pt";
-            const originalParent = edgeGroup.node().parentNode;
-            const originalPosition = Array.from(originalParent.childNodes).indexOf(edgeGroup.node());
+            const originalLabelTransform = labelGroup.attr("transform");
             
             function highlightEdge() {
-                // Move to end of parent's children list to appear on top — but only if not already there.
-                // Re-appending during the mouseenter handler triggers another mouseenter on the same path,
-                // creating a re-entry loop that prevents mouseleave from ever firing.
-                if (edgeGroup.node() !== originalParent.lastChild) {
-                    originalParent.appendChild(edgeGroup.node());
-                }
-                
                 // Make edge thicker
                 path.attr("stroke-width", parseFloat(originalStrokeWidth) * 1.4);
                 
-                // Make label text larger
-                labelText.style("font-size", "7pt");
-                    
-                // Adjust the background rectangle for the label
-                const bbox = labelText.node().getBBox();
-                labelBg.attr("x", bbox.x - 2)
-                    .attr("y", bbox.y - 2)
-                    .attr("width", bbox.width + 4)
-                    .attr("height", bbox.height + 4);
+                if (labelGroup.node()) {
+                    labelGroup.attr("transform", `${originalLabelTransform} scale(1.12)`);
+                }
+                if (edgeData && hasComparableShapeInfo(edgeData)) {
+                    const popupScale = d3.zoomTransform(svg.node()).k / shapeTooltipBaseZoom;
+                    showShapeComparison(labelGroup.node(), edgeData.shape_info, popupScale);
+                }
             }
             
             function resetEdge() {
-                // Restore original position in parent's children list
-                const currentIndex = Array.from(originalParent.childNodes).indexOf(edgeGroup.node());
-                if (currentIndex !== originalPosition) {
-                    // Insert back at original position
-                    const referenceNode = originalParent.childNodes[originalPosition] || null;
-                    originalParent.insertBefore(edgeGroup.node(), referenceNode);
-                }
-                
                 // Restore original edge thickness
                 path.attr("stroke-width", originalStrokeWidth);
                 
-                // Restore original label text size
-                labelText.style("font-size", originalFontSize);
-                    
-                // Restore original background rectangle size
-                const bbox = labelText.node().getBBox();
-                labelBg.attr("x", bbox.x - 2)
-                    .attr("y", bbox.y - 2)
-                    .attr("width", bbox.width + 4)
-                    .attr("height", bbox.height + 4);
+                if (labelGroup.node()) {
+                    labelGroup.attr("transform", originalLabelTransform);
+                }
+                removeTooltip();
             }
             
             // Add hover events to the path
@@ -1652,10 +1870,7 @@
             
             // Add hover events to label group (both text and background)
             if (labelGroup.node()) {
-                labelText.on("mouseenter", highlightEdge)
-                    .on("mouseleave", resetEdge);
-                    
-                labelBg.on("mouseenter", highlightEdge)
+                labelGroup.on("mouseenter", highlightEdge)
                     .on("mouseleave", resetEdge);
             }
         });
@@ -2198,6 +2413,8 @@
                 .translate(translate[0], translate[1])
                 .scale(scale));
         }
+
+        shapeTooltipBaseZoom = d3.zoomTransform(svg.node()).k;
             
     }
 })();

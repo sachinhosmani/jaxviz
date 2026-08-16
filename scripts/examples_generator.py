@@ -5,8 +5,9 @@ Usage:
 
 Each file in examples/ exposes ``model`` (the callable to trace) and
 ``example_input``, and may optionally expose ``trace_context`` (a context manager
-entered around tracing). This script imports each one and writes its graph to
-examples/generated/<name>.html.
+entered around tracing) and ``levels``. This script imports each one and writes
+its graph to examples/generated/<name>.html, or <name>_<level>.html when more
+than one level is requested.
 """
 import contextlib
 import importlib.util
@@ -37,19 +38,23 @@ def generate_all():
         model = getattr(module, "model")
         example_input = getattr(module, "example_input")
         trace_context = getattr(module, "trace_context", contextlib.nullcontext())
+        levels = getattr(module, "levels", ("high",))
 
-        output_path = GENERATED_DIR / f"{path.stem}.html"
-        print(f"Generating {path.stem}...")
         with trace_context:
-            trace_model(
-                model,
-                example_input,
-                export_format="html",
-                export_path=str(output_path),
-                height=805,
-                width="100%",
-            )
-        print(f"Saved output to {output_path}")
+            for level in levels:
+                suffix = f"_{level}" if len(levels) > 1 else ""
+                output_path = GENERATED_DIR / f"{path.stem}{suffix}.html"
+                print(f"Generating {path.stem} ({level})...")
+                trace_model(
+                    model,
+                    example_input,
+                    level=level,
+                    export_format="html",
+                    export_path=str(output_path),
+                    height=805,
+                    width="100%",
+                )
+                print(f"Saved output to {output_path}")
 
 
 if __name__ == "__main__":

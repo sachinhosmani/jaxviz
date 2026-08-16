@@ -66,10 +66,46 @@ def _hlo_shape_parts(shape):
     return dtype, dims
 
 
-def _dims_str(dims):
-    if not dims:
-        return "( )"
-    return "(" + ", ".join(str(d) for d in dims) + ")"
+def _shape_info(local_dims, global_dims):
+    """Structured shape data used by the low-level edge visualization."""
+    local = list(local_dims)
+    if global_dims is None:
+        return {
+            "global": None,
+            "local": local,
+            "partitions": None,
+            "status": "unavailable",
+        }
+
+    global_shape = list(global_dims)
+    if len(global_shape) != len(local):
+        return {
+            "global": None,
+            "local": local,
+            "partitions": None,
+            "status": "unavailable",
+        }
+
+    partitions = []
+    for global_dim, local_dim in zip(global_shape, local):
+        if global_dim == local_dim:
+            partitions.append(1)
+        elif local_dim > 0 and global_dim % local_dim == 0:
+            partitions.append(global_dim // local_dim)
+        else:
+            return {
+                "global": None,
+                "local": local,
+                "partitions": None,
+                "status": "unavailable",
+            }
+
+    return {
+        "global": global_shape,
+        "local": local,
+        "partitions": partitions,
+        "status": "verified",
+    }
 
 
 def _sharding_tiling(sharding):
@@ -610,22 +646,17 @@ def build_hlo_graph(lowered):
             root_name = name
 
     def _edge(src_node, dst_node):
-        # An edge carries a tensor; show its per-device (local) size and, explicitly,
-        # its full (global) size: the real size when sharded, "same" when replicated,
-        # or "n/a" when we can't recover it — never a silent omission.
+        # Keep shape data structured so the frontend can draw the global-to-local
+        # partitioning instead of flattening it into a long text label.
         local_str = _hlo_shape_to_dims(out_shape.get(src_node, ""))
         _, local_dims = _hlo_shape_parts(out_shape.get(src_node, ""))
         g = node_global.get(src_node)
-        edge = {"target": dst_node, "edge_data_id": f"{src_node}->{dst_node}"}
-        if g is None:
-            edge["dims"] = f"{local_str} · global n/a"
-        elif list(g) == list(local_dims):
-            edge["dims"] = f"{local_str} · global same"
-            edge["global_dims"] = _dims_str(g)
-        else:
-            edge["dims"] = f"{local_str} · global {_dims_str(g)}"
-            edge["global_dims"] = _dims_str(g)
-        return edge
+        return {
+            "target": dst_node,
+            "dims": local_str,
+            "shape_info": _shape_info(local_dims, g),
+            "edge_data_id": f"{src_node}->{dst_node}",
+        }
 
     # ---- edges ----
     seen = set()
