@@ -519,6 +519,11 @@
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
+        .shape-comparison-tooltip_${unique_id} tr.shape-connectors_${unique_id} th {
+            color: #6657A8;
+            font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+
         .edge_${unique_id}.implied-edge_${unique_id} {
             stroke-dasharray: 5,5;
         }
@@ -734,7 +739,7 @@
         axisPartitions.forEach(axisPartition => {
             const factor = `÷${axisPartition.size}`;
             const axisName = String(axisPartition.name);
-            const combined = `${factor} (${axisName})`;
+            const combined = `${factor} ("${axisName}")`;
             if (combined.length <= 20) {
                 lines.push(combined);
                 return;
@@ -743,8 +748,8 @@
             const wrappedName = wrapAxisName(axisName);
             lines.push(factor);
             wrappedName.forEach((line, index) => {
-                const prefix = index === 0 ? "(" : "";
-                const suffix = index === wrappedName.length - 1 ? ")" : "";
+                const prefix = index === 0 ? "(\"" : "";
+                const suffix = index === wrappedName.length - 1 ? "\")" : "";
                 lines.push(`${prefix}${line}${suffix}`);
             });
         });
@@ -755,7 +760,10 @@
         const row = table.insertRow();
         row.className = "shape-connectors_${unique_id}";
 
-        row.appendChild(document.createElement("th"));
+        const heading = document.createElement("th");
+        heading.scope = "row";
+        heading.textContent = "Axes";
+        row.appendChild(heading);
         row.insertCell();
 
         const labelsByDimension = partitions.map((partitionCount, index) =>
