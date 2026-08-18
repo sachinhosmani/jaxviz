@@ -66,7 +66,53 @@ def _hlo_shape_parts(shape):
     return dtype, dims
 
 
-def _shape_info(local_dims, global_dims):
+def _partition_axes(partitions, mesh_shape):
+    """Map each tensor partition factor to named mesh axes when unambiguous."""
+    if not mesh_shape:
+        return None
+
+    mesh_axes = [
+        (str(name), int(size)) for name, size in mesh_shape.items()
+        if int(size) > 1
+    ]
+    solutions = []
+
+    def visit(dimension, remaining_axes, assignment):
+        if len(solutions) > 1:
+            return
+        if dimension == len(partitions):
+            solutions.append([
+                [{"name": name, "size": size} for name, size in axes]
+                for axes in assignment
+            ])
+            return
+
+        target = partitions[dimension]
+        if target == 1:
+            visit(dimension + 1, remaining_axes, assignment + [()])
+            return
+
+        axis_count = len(remaining_axes)
+        for mask in range(1, 1 << axis_count):
+            selected = [remaining_axes[index] for index in range(axis_count) if mask & (1 << index)]
+            product = 1
+            for _, size in selected:
+                product *= size
+            if product != target:
+                continue
+            selected_indexes = {index for index in range(axis_count) if mask & (1 << index)}
+            unused = [axis for index, axis in enumerate(remaining_axes) if index not in selected_indexes]
+            visit(
+                dimension + 1,
+                unused,
+                assignment + [tuple(selected)],
+            )
+
+    visit(0, mesh_axes, [])
+    return solutions[0] if len(solutions) == 1 else None
+
+
+def _shape_info(local_dims, global_dims, mesh_shape=None):
     """Structured shape data used by the low-level edge visualization."""
     local = list(local_dims)
     if global_dims is None:
@@ -74,6 +120,7 @@ def _shape_info(local_dims, global_dims):
             "global": None,
             "local": local,
             "partitions": None,
+            "axes": None,
             "status": "unavailable",
         }
 
@@ -83,6 +130,7 @@ def _shape_info(local_dims, global_dims):
             "global": None,
             "local": local,
             "partitions": None,
+            "axes": None,
             "status": "unavailable",
         }
 
@@ -97,6 +145,7 @@ def _shape_info(local_dims, global_dims):
                 "global": None,
                 "local": local,
                 "partitions": None,
+                "axes": None,
                 "status": "unavailable",
             }
 
@@ -104,6 +153,7 @@ def _shape_info(local_dims, global_dims):
         "global": global_shape,
         "local": local,
         "partitions": partitions,
+        "axes": _partition_axes(partitions, mesh_shape),
         "status": "verified",
     }
 
@@ -481,7 +531,7 @@ def _module_path_from_frames(frames, src, user_files):
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
-def build_hlo_graph(lowered):
+def build_hlo_graph(lowered, mesh_shape=None):
     text, propagated = _dump_hlo_stages(lowered)
     global_index = _build_global_index(propagated)
     out_global = _propagated_output(propagated)
@@ -654,7 +704,7 @@ def build_hlo_graph(lowered):
         return {
             "target": dst_node,
             "dims": local_str,
-            "shape_info": _shape_info(local_dims, g),
+            "shape_info": _shape_info(local_dims, g, mesh_shape),
             "edge_data_id": f"{src_node}->{dst_node}",
         }
 

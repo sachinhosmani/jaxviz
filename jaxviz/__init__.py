@@ -63,6 +63,16 @@ def _lower_for_hlo(fn, example_args):
     return jax.jit(fn).lower(*example_args)
 
 
+def _active_mesh_shape():
+    get_mesh = getattr(jax.sharding, "get_mesh", None)
+    if get_mesh is None:
+        return None
+    try:
+        return dict(get_mesh().shape)
+    except (AttributeError, RuntimeError):
+        return None
+
+
 def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_depth=1,
                 height=800, width=None, export_format=None, export_path=None,
                 show_constants=False, return_html=False):
@@ -98,7 +108,7 @@ def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_dept
 
     if level == LEVEL_LOW:
         lowered = _lower_for_hlo(fn, example_args)
-        blobs = build_hlo_graph(lowered)
+        blobs = build_hlo_graph(lowered, mesh_shape=_active_mesh_shape())
     else:
         with _module_scope_context(fn):
             closed_jaxpr = jax.make_jaxpr(fn)(*example_args)

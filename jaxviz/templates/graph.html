@@ -459,7 +459,7 @@
             position: absolute;
             z-index: 1000;
             display: none;
-            padding: 8px 10px;
+            padding: 11px 13px;
             color: #2f2f2f;
             background: white;
             border: 1px solid #c9c9c2;
@@ -475,24 +475,24 @@
         }
 
         .shape-comparison-tooltip_${unique_id} th {
-            padding: 1px 10px 1px 0;
+            padding: 2px 12px 2px 0;
             color: #555;
-            font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
         .shape-comparison-tooltip_${unique_id} td {
-            padding: 1px 0;
-            font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            padding: 2px 0;
+            font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
         .shape-comparison-tooltip_${unique_id} td.shape-dimension_${unique_id} {
-            min-width: 24px;
+            min-width: 30px;
         }
 
         .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} {
-            height: 30px;
+            height: 36px;
         }
 
         .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} svg {
@@ -516,7 +516,7 @@
 
         .shape-comparison-tooltip_${unique_id} td.shape-connector_${unique_id} text {
             fill: #6657A8;
-            font: 700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
         .edge_${unique_id}.implied-edge_${unique_id} {
@@ -700,54 +700,125 @@
         addCell(label ? ")" : "");
     }
 
-    function appendShapeConnectorRow(table, partitions) {
+    function wrapAxisName(axisName, maxCharacters = 16) {
+        const remainingParts = String(axisName).split(/([_\-\s]+)/).filter(Boolean);
+        const lines = [];
+        let currentLine = "";
+
+        remainingParts.forEach(part => {
+            if ((currentLine + part).length <= maxCharacters) {
+                currentLine += part;
+                return;
+            }
+            if (currentLine) {
+                lines.push(currentLine);
+                currentLine = "";
+            }
+            while (part.length > maxCharacters) {
+                lines.push(part.slice(0, maxCharacters));
+                part = part.slice(maxCharacters);
+            }
+            currentLine = part;
+        });
+        if (currentLine) lines.push(currentLine);
+        return lines.length ? lines : [String(axisName)];
+    }
+
+    function connectorLabelLines(partitionCount, axisPartitions) {
+        if (partitionCount === 1) return [];
+        if (!Array.isArray(axisPartitions) || !axisPartitions.length) {
+            return [`÷${partitionCount}`];
+        }
+
+        const lines = [];
+        axisPartitions.forEach(axisPartition => {
+            const factor = `÷${axisPartition.size}`;
+            const axisName = String(axisPartition.name);
+            const combined = `${factor} (${axisName})`;
+            if (combined.length <= 20) {
+                lines.push(combined);
+                return;
+            }
+
+            const wrappedName = wrapAxisName(axisName);
+            lines.push(factor);
+            wrappedName.forEach((line, index) => {
+                const prefix = index === 0 ? "(" : "";
+                const suffix = index === wrappedName.length - 1 ? ")" : "";
+                lines.push(`${prefix}${line}${suffix}`);
+            });
+        });
+        return lines;
+    }
+
+    function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
         row.className = "shape-connectors_${unique_id}";
 
         row.appendChild(document.createElement("th"));
         row.insertCell();
 
-        partitions.forEach((partitionsForDimension, index) => {
-            const label = `÷${partitionsForDimension}`;
-            const width = Math.max(26, label.length * 7 + 6);
+        const labelsByDimension = partitions.map((partitionCount, index) =>
+            connectorLabelLines(partitionCount, Array.isArray(axes) ? axes[index] : null)
+        );
+        const maximumLineCount = Math.max(0, ...labelsByDimension.map(lines => lines.length));
+        const connectorHeight = Math.max(40, maximumLineCount * 14 + 32);
+
+        partitions.forEach((partitionCount, index) => {
+            const labelLines = labelsByDimension[index];
+            const longestLine = Math.max(0, ...labelLines.map(line => line.length));
+            const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
             cell.className = "shape-dimension_${unique_id} shape-connector_${unique_id}";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
-            svg.setAttribute("height", 30);
-            svg.setAttribute("viewBox", `0 0 ${width} 30`);
-            svg.setAttribute("aria-label", `divide by ${partitionsForDimension}`);
+            svg.setAttribute("height", connectorHeight);
+            svg.setAttribute("viewBox", `0 0 ${width} ${connectorHeight}`);
+            svg.setAttribute(
+                "aria-label",
+                labelLines.length ? labelLines.join(" ") : "unchanged dimension"
+            );
 
             const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
             line.setAttribute("x1", center);
             line.setAttribute("y1", 0);
             line.setAttribute("x2", center);
-            line.setAttribute("y2", 26);
+            line.setAttribute("y2", connectorHeight - 4);
             svg.appendChild(line);
 
             const arrowhead = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
             arrowhead.setAttribute(
                 "points",
-                `${center - 3.5},24 ${center + 3.5},24 ${center},30`
+                `${center - 4},${connectorHeight - 7} ${center + 4},${connectorHeight - 7} ${center},${connectorHeight}`
             );
             svg.appendChild(arrowhead);
 
-            const labelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            labelBackground.setAttribute("x", 1);
-            labelBackground.setAttribute("y", 8);
-            labelBackground.setAttribute("width", width - 2);
-            labelBackground.setAttribute("height", 13);
-            labelBackground.setAttribute("rx", 3);
-            svg.appendChild(labelBackground);
+            if (labelLines.length) {
+                const labelHeight = labelLines.length * 14 + 4;
+                const labelY = (connectorHeight - labelHeight) / 2;
+                const labelBackground = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                labelBackground.setAttribute("x", 1);
+                labelBackground.setAttribute("y", labelY);
+                labelBackground.setAttribute("width", width - 2);
+                labelBackground.setAttribute("height", labelHeight);
+                labelBackground.setAttribute("rx", 3);
+                svg.appendChild(labelBackground);
 
-            const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-            labelText.setAttribute("x", center);
-            labelText.setAttribute("y", 17.5);
-            labelText.setAttribute("text-anchor", "middle");
-            labelText.textContent = label;
-            svg.appendChild(labelText);
+                const labelText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                labelText.setAttribute("x", center);
+                labelText.setAttribute("y", labelY + 12);
+                labelText.setAttribute("text-anchor", "middle");
+                labelLines.forEach((labelLine, lineIndex) => {
+                    const tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+                    tspan.setAttribute("x", center);
+                    tspan.setAttribute("dy", lineIndex === 0 ? 0 : 14);
+                    tspan.textContent = labelLine;
+                    labelText.appendChild(tspan);
+                });
+                svg.appendChild(labelText);
+            }
             cell.appendChild(svg);
 
             if (index < partitions.length - 1) row.insertCell();
@@ -787,7 +858,7 @@
         tooltip.className = "shape-comparison-tooltip_${unique_id}";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
-        appendShapeConnectorRow(table, shapeInfo.partitions);
+        appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
@@ -1587,7 +1658,6 @@
         .style("height", "100%");
 
         const inner = svg.append("g");
-        let shapeTooltipBaseZoom = 1;
 
         // Add zoom behavior
         const zoom = d3.zoom().on("zoom", function(event) {
@@ -1600,7 +1670,7 @@
                 positionShapeComparison(
                     currentTooltip,
                     currentTooltip.shapeAnchorElement,
-                    event.transform.k / shapeTooltipBaseZoom
+                    event.transform.k
                 );
             } else {
                 removeTooltip();
@@ -1849,7 +1919,7 @@
                     labelGroup.attr("transform", `${originalLabelTransform} scale(1.12)`);
                 }
                 if (edgeData && hasComparableShapeInfo(edgeData)) {
-                    const popupScale = d3.zoomTransform(svg.node()).k / shapeTooltipBaseZoom;
+                    const popupScale = d3.zoomTransform(svg.node()).k;
                     showShapeComparison(labelGroup.node(), edgeData.shape_info, popupScale);
                 }
             }
@@ -2414,8 +2484,6 @@
                 .scale(scale));
         }
 
-        shapeTooltipBaseZoom = d3.zoomTransform(svg.node()).k;
-            
     }
 })();
 
