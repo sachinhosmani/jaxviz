@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${page_title}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/python.min.js"></script>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        :root {
+            color-scheme: light;
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #f3f3eb;
+        }
+
+        body {
+            color: #242424;
+        }
+
+        .app-shell {
+            height: 100vh;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(340px, 42%) minmax(0, 1fr);
+            height: 100%;
+            min-height: 0;
+        }
+
+        .pane {
+            display: grid;
+            grid-template-rows: 42px minmax(0, 1fr);
+            min-width: 0;
+            min-height: 0;
+        }
+
+        .code-pane {
+            background: #0d1117;
+            border-right: 1px solid #403e52;
+        }
+
+        .graph-pane {
+            background: #f3f3eb;
+        }
+
+        .pane-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px 0 15px;
+            font-size: 12px;
+            font-weight: 650;
+            letter-spacing: 0.02em;
+        }
+
+        .code-pane .pane-toolbar {
+            color: #c9d1d9;
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+        }
+
+        .graph-pane .pane-toolbar {
+            color: #4b4b47;
+            background: #e8e8df;
+            border-bottom: 1px solid #d1d1c8;
+        }
+
+        .copy-button {
+            padding: 5px 10px;
+            color: #c9d1d9;
+            background: #21262d;
+            border: 1px solid #484f58;
+            border-radius: 5px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .copy-button:hover {
+            background: #30363d;
+        }
+
+        .code-scroll {
+            min-height: 0;
+            overflow: auto;
+            scrollbar-color: #484f58 #0d1117;
+        }
+
+        .code-scroll pre {
+            min-width: max-content;
+            margin: 0;
+        }
+
+        .code-scroll code,
+        .code-scroll code.hljs {
+            min-height: 100%;
+            padding: 18px 20px 40px;
+            background: #0d1117;
+            font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+            tab-size: 4;
+        }
+
+        .graph-stage {
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .graph-stage > [id^="graph-container_"] {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        @media (max-width: 820px) {
+            html, body {
+                overflow: auto;
+            }
+
+            .app-shell {
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .workspace {
+                grid-template-columns: 1fr;
+                grid-template-rows: minmax(320px, 45vh) minmax(520px, 55vh);
+            }
+
+            .code-pane {
+                border-right: 0;
+                border-bottom: 1px solid #403e52;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <main class="workspace">
+            <section class="pane code-pane" aria-label="Example source code">
+                <div class="pane-toolbar">
+                    <span>Python</span>
+                    <button class="copy-button" type="button" id="copy-code">Copy</button>
+                </div>
+                <div class="code-scroll">
+                    <pre><code class="language-python" id="example-code">${code_contents}</code></pre>
+                </div>
+            </section>
+            <section class="pane graph-pane" aria-label="Interactive visualization">
+                <div class="pane-toolbar">
+                    <span>Interactive graph</span>
+                </div>
+                <div class="graph-stage">${graph_html}</div>
+            </section>
+        </main>
+    </div>
+    <script>
+        window.addEventListener("DOMContentLoaded", () => {
+            const code = document.getElementById("example-code");
+            if (window.hljs) window.hljs.highlightElement(code);
+
+            const button = document.getElementById("copy-code");
+            button.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(code.textContent);
+                    button.textContent = "Copied";
+                    window.setTimeout(() => { button.textContent = "Copy"; }, 1400);
+                } catch (error) {
+                    button.textContent = "Select code to copy";
+                }
+            });
+        });
+    </script>
+</body>
+</html>

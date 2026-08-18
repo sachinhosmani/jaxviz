@@ -65,7 +65,7 @@ def _lower_for_hlo(fn, example_args):
 
 def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_depth=1,
                 height=800, width=None, export_format=None, export_path=None,
-                show_constants=False):
+                show_constants=False, return_html=False):
     """Trace a JAX model and render its forward pass as an interactive graph.
 
     Args:
@@ -86,6 +86,7 @@ def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_dept
         export_path: Optional path for HTML export.
         show_constants: Draw inline literal operands and scalar constants as
             Constant nodes (off by default to keep the graph uncluttered). High level only.
+        return_html: Return the embeddable graph HTML instead of displaying or exporting it.
     """
     if level not in _LEVELS:
         raise ValueError(f"Invalid level: {level!r}. Must be one of {_LEVELS}.")
@@ -122,4 +123,5 @@ def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_dept
         blobs["repeat_containers"],
         show_modular_view=False,
         export_path=export_path,
+        return_html=return_html,
     )

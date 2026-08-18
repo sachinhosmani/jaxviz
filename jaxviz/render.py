@@ -12,6 +12,14 @@ from IPython.display import display, HTML
 from .enums import ExportFormat
 
 
+def _css_size(value, default="100%"):
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return f"{value}px"
+    return str(value)
+
+
 def generate_html_file_action(html_str, unique_id, export_path=None):
     if export_path is not None:
         base_path = Path(export_path).expanduser()
@@ -40,7 +48,8 @@ def plot_graph(adj_list, module_info, func_info, node_to_module_path,
                graph_node_name_to_without_suffix, graph_node_display_names,
                node_to_attr_name, ancestor_map, collapse_modules_after_depth,
                height, width, export_format, show_module_attr_names,
-               repeat_containers, show_modular_view=False, export_path=None):
+               repeat_containers, show_modular_view=False, export_path=None,
+               return_html=False):
     unique_id = str(uuid.uuid4())
     template_str = resources.read_text('jaxviz.templates', 'graph.html')
     d3_source = resources.read_text('jaxviz.assets', 'd3.min.js')
@@ -69,12 +78,15 @@ def plot_graph(adj_list, module_info, func_info, node_to_module_path,
         'collapse_modules_after_depth': collapse_modules_after_depth,
         'node_to_module_path': node_to_module_path,
         'show_module_attr_names': 'true' if show_module_attr_names else 'false',
-        'height': f'{height}px' if (export_format not in (ExportFormat.PNG, ExportFormat.SVG)) else '0px',
-        'width': f'{width}px' if width is not None else '100%',
+        'height': _css_size(height) if (export_format not in (ExportFormat.PNG, ExportFormat.SVG)) else '0px',
+        'width': _css_size(width),
         'generate_image': 'true' if export_format is ExportFormat.PNG else 'false',
         'generate_svg': 'true' if export_format is ExportFormat.SVG else 'false',
         'show_modular_view': 'true' if show_modular_view else 'false',
     })
+
+    if return_html:
+        return output
 
     if export_format == ExportFormat.HTML:
         return generate_html_file_action(output, unique_id, export_path=export_path)
