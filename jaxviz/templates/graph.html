@@ -835,16 +835,26 @@
         row.insertCell();
     }
 
+    function shapeComparisonScale(tooltip, containerRect, zoomScale) {
+        const desiredScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const naturalWidth = tooltip.offsetWidth;
+        const naturalHeight = tooltip.offsetHeight;
+        const widthScale = containerRect.width * 0.72 / naturalWidth;
+        const heightScale = containerRect.height * 0.55 / naturalHeight;
+        return Math.min(desiredScale, widthScale, heightScale);
+    }
+
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
         const container = document.getElementById("graph-container_${unique_id}");
-        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
-        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.transform = "scale(1)";
         tooltip.style.display = "block";
+        const scale = shapeComparisonScale(tooltip, containerRect, zoomScale);
+        tooltip.style.transform = `scale(${scale})`;
 
         const anchorRect = anchorElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         const unclampedLeft = anchorRect.left + anchorRect.width / 2
             - containerRect.left - tooltipRect.width / 2;
