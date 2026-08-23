@@ -98,6 +98,25 @@ def _add_trace_import(source):
     return "\n".join(lines)
 
 
+def _insert_into_context(source, context_expression, statement):
+    tree = ast.parse(source)
+    matching_blocks = [
+        node for node in tree.body
+        if isinstance(node, ast.With) and any(
+            ast.get_source_segment(source, item.context_expr) == context_expression
+            for item in node.items
+        )
+    ]
+    if not matching_blocks:
+        return None
+
+    block = matching_blocks[-1]
+    indentation = " " * block.body[0].col_offset
+    lines = source.splitlines()
+    lines.insert(block.end_lineno, f"{indentation}{statement}")
+    return "\n".join(lines)
+
+
 def build_display_code(path, view, module):
     override = getattr(module, "code_contents", None)
     if override:
@@ -112,6 +131,9 @@ def build_display_code(path, view, module):
     trace_call = f"trace_model(model, {argument_expression}, {', '.join(keyword_expressions)})"
 
     if context_expression:
+        combined_source = _insert_into_context(source, context_expression, trace_call)
+        if combined_source is not None:
+            return combined_source + "\n"
         trace_call = f"with {context_expression}:\n    {trace_call}"
 
     return f"{source}\n\n{trace_call}\n"

@@ -32,3 +32,25 @@ views = ("global", "per_device")
     assert "with jax.set_mesh(mesh):" in code
     assert "view='per_device'" in code
     assert "show_constants=True" in code
+
+
+def test_build_display_code_reuses_existing_trace_context(tmp_path):
+    source_path = tmp_path / "example.py"
+    source_path.write_text(
+        '''import jax
+import jax.numpy as jnp
+
+with jax.set_mesh(mesh):
+    model = lambda x: x
+    example_input = jnp.ones((2,))
+
+trace_context = jax.set_mesh(mesh)
+views = ("global", "per_device")
+'''
+    )
+    module = SimpleNamespace(example_input=object())
+
+    code = build_display_code(source_path, "per_device", module)
+
+    assert code.count("with jax.set_mesh(mesh):") == 1
+    assert "    trace_model(model, example_input, view='per_device')" in code
