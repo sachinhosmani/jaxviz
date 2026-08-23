@@ -202,7 +202,7 @@ with jax.set_mesh(mesh):
     example_input = jax.device_put(jnp.ones((16, 32)), jax.P(&quot;data&quot;, None))
 
 with jax.set_mesh(mesh):
-    trace_model(model, example_input, level=&#x27;high&#x27;, collapse_modules_after_depth=2)
+    trace_model(model, example_input, view=&#x27;global&#x27;, collapse_modules_after_depth=2)
 </code></pre>
                 </div>
             </section>
@@ -210,124 +210,124 @@ with jax.set_mesh(mesh):
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
-    <div id="graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb"></div>
-    <div class="logo_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
+                <div class="graph-stage"><div id="graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311">
+    <div id="graph_bb87e896-cb83-4c40-a405-dea6c6d2c311"></div>
+    <div class="logo_bb87e896-cb83-4c40-a405-dea6c6d2c311">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb" class="popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="display: none;">
-        <div class="popup-header_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
-            <h3 id="popup-title_512f7b40-c9cb-4546-b67b-c1a673cf36bb"></h3>
-            <span class="popup-close_512f7b40-c9cb-4546-b67b-c1a673cf36bb">✕</span>
+    <div id="popup_bb87e896-cb83-4c40-a405-dea6c6d2c311" class="popup_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="display: none;">
+        <div class="popup-header_bb87e896-cb83-4c40-a405-dea6c6d2c311">
+            <h3 id="popup-title_bb87e896-cb83-4c40-a405-dea6c6d2c311"></h3>
+            <span class="popup-close_bb87e896-cb83-4c40-a405-dea6c6d2c311">✕</span>
         </div>
-        <div id="popup-content_512f7b40-c9cb-4546-b67b-c1a673cf36bb" class="popup-content_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
-            <div id="common-info_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
-                <p id="attr-name-row_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_bb87e896-cb83-4c40-a405-dea6c6d2c311" class="popup-content_bb87e896-cb83-4c40-a405-dea6c6d2c311">
+            <div id="common-info_bb87e896-cb83-4c40-a405-dea6c6d2c311">
+                <p id="attr-name-row_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="display:none;">
-                <details open id="module-parameters-details_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
+            <div id="module-template_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="display:none;">
+                <details open id="module-parameters-details_bb87e896-cb83-4c40-a405-dea6c6d2c311">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_512f7b40-c9cb-4546-b67b-c1a673cf36bb" class="json-viewer_512f7b40-c9cb-4546-b67b-c1a673cf36bb"></div>
+                    <div id="module-parameters_bb87e896-cb83-4c40-a405-dea6c6d2c311" class="json-viewer_bb87e896-cb83-4c40-a405-dea6c6d2c311"></div>
                 </details>
-                <details open id="module-attributes-details_512f7b40-c9cb-4546-b67b-c1a673cf36bb">
+                <details open id="module-attributes-details_bb87e896-cb83-4c40-a405-dea6c6d2c311">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_512f7b40-c9cb-4546-b67b-c1a673cf36bb" class="json-viewer_512f7b40-c9cb-4546-b67b-c1a673cf36bb"></div>
+                    <div id="module-attributes_bb87e896-cb83-4c40-a405-dea6c6d2c311" class="json-viewer_bb87e896-cb83-4c40-a405-dea6c6d2c311"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="display:none;">
+            <div id="tensor-op-template_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_512f7b40-c9cb-4546-b67b-c1a673cf36bb" class="json-viewer_512f7b40-c9cb-4546-b67b-c1a673cf36bb"></div>
+                <div id="tensor-op-parameters_bb87e896-cb83-4c40-a405-dea6c6d2c311" class="json-viewer_bb87e896-cb83-4c40-a405-dea6c6d2c311"></div>
             </div>
-            <p id="no-info_512f7b40-c9cb-4546-b67b-c1a673cf36bb" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_bb87e896-cb83-4c40-a405-dea6c6d2c311" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        text.node-label_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        text.type-indicator_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        text.collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .edge_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             stroke: #797979;
             fill: none;
         }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.input_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #FF9AFF; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: rgb(235 235 235); }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.input_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #FF9AFF; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.constant_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: rgb(235 235 235); }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.output_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #74e071; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.failed_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: rgb(224 15 15); }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.module_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #8BDEDB; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect.operation_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #FEBC5A; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.output_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #74e071; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.failed_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: rgb(224 15 15); }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.module_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #8BDEDB; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect.operation_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #FEBC5A; }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse.input_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #FF9AFF; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse.constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: rgb(235 235 235); }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse.output_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #74e071; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse.parameter_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: #B9CCF3; }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse.failed_512f7b40-c9cb-4546-b67b-c1a673cf36bb { fill: rgb(224 15 15); }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse.input_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #FF9AFF; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse.constant_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: rgb(235 235 235); }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse.output_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #74e071; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse.parameter_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: #B9CCF3; }
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse.failed_bb87e896-cb83-4c40-a405-dea6c6d2c311 { fill: rgb(224 15 15); }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .edgeLabelGroup_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             pointer-events: none;
         }
-        #arrowhead_512f7b40-c9cb-4546-b67b-c1a673cf36bb path {
+        #arrowhead_bb87e896-cb83-4c40-a405-dea6c6d2c311 path {
             fill: #333333;;
         }
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect,
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb ellipse {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect,
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb .type-indicator_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311 .type-indicator_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb.error_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311.error_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb.error_512f7b40-c9cb-4546-b67b-c1a673cf36bb > rect:first-of-type {
+        .boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311.error_bb87e896-cb83-4c40-a405-dea6c6d2c311 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #graph_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             height: 100%;
         }
         
-        .popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .popup_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -342,7 +342,7 @@ with jax.set_mesh(mesh):
             flex-direction: column;
         }
 
-        .popup-header_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .popup-header_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: sticky;
             top: 0;
             background: white;
@@ -354,12 +354,12 @@ with jax.set_mesh(mesh):
             z-index: 1;
         }
 
-        .popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb h3 {
+        .popup_bb87e896-cb83-4c40-a405-dea6c6d2c311 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .popup-content_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -367,87 +367,87 @@ with jax.set_mesh(mesh):
             flex-grow: 1;
         }
 
-        .popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb pre {
+        .popup_bb87e896-cb83-4c40-a405-dea6c6d2c311 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .popup-close_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #popup-title_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: relative;
         }
 
-        #graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb pre {
+        #graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             pointer-events: none;
         }
-        .boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb text {
+        .boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             pointer-events: none;
         }
-        .boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb text {
+        .boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb text {
+        .edge-label_bb87e896-cb83-4c40-a405-dea6c6d2c311 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb, .info-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311, .info-button_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover, .info-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        .collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover, .info-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb, .info-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311, .info-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .collapse-button-disabled_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        .collapse-button-disabled_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .collapse-icon-disabled_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -456,23 +456,23 @@ with jax.set_mesh(mesh):
         }
 
         /* Edge hover styles */
-        .edge-group_512f7b40-c9cb-4546-b67b-c1a673cf36bb path {
+        .edge-group_bb87e896-cb83-4c40-a405-dea6c6d2c311 path {
             pointer-events: stroke;
         }
 
-        .edge-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .edge-label_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             pointer-events: all;
         }
 
-        .edge-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb.has-shape-details_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .edge-label_bb87e896-cb83-4c40-a405-dea6c6d2c311.has-shape-details_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_512f7b40-c9cb-4546-b67b-c1a673cf36bb circle {
+        .edge-shape-info-badge_bb87e896-cb83-4c40-a405-dea6c6d2c311 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_512f7b40-c9cb-4546-b67b-c1a673cf36bb text {
+        .edge-shape-info-badge_bb87e896-cb83-4c40-a405-dea6c6d2c311 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -514,50 +514,50 @@ with jax.set_mesh(mesh):
             }
         }
 
-        .highlight-cluster_512f7b40-c9cb-4546-b67b-c1a673cf36bb > rect:first-of-type {
+        .highlight-cluster_bb87e896-cb83-4c40-a405-dea6c6d2c311 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .highlight-node_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        text.node-label_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb.constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb .node-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311.constant_bb87e896-cb83-4c40-a405-dea6c6d2c311 .node-label_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             font-size: 0.7rem;
         }
 
-        .popup-content_512f7b40-c9cb-4546-b67b-c1a673cf36bb summary {
+        .popup-content_bb87e896-cb83-4c40-a405-dea6c6d2c311 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb.input_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect,
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb.output_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect,
-        .node_512f7b40-c9cb-4546-b67b-c1a673cf36bb.constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311.input_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect,
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311.output_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect,
+        .node_bb87e896-cb83-4c40-a405-dea6c6d2c311.constant_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #png-error-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #png-error-message_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -568,13 +568,13 @@ with jax.set_mesh(mesh):
             text-align: left;
         }
 
-        #png-link-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #png-link-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #png-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -584,11 +584,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #png-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        #png-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #png-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -597,18 +597,18 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #png-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        #png-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #svg-link-container_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #svg-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -618,11 +618,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #svg-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        #svg-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        #svg-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -631,11 +631,11 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #svg-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb:hover {
+        #svg-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .custom-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -651,7 +651,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .custom-tooltip_smaller_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .custom-tooltip_smaller_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -667,7 +667,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -681,71 +681,71 @@ with jax.set_mesh(mesh):
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb table {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb th {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-dimension_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-dimension_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb svg {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb line {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb polygon {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb rect {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb td.shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb text {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 td.shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb tr.shape-connectors_512f7b40-c9cb-4546-b67b-c1a673cf36bb th {
+        .shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311 tr.shape-connectors_bb87e896-cb83-4c40-a405-dea6c6d2c311 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb.implied-edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .edge_bb87e896-cb83-4c40-a405-dea6c6d2c311.implied-edge_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_512f7b40-c9cb-4546-b67b-c1a673cf36bb {
+        .logo_bb87e896-cb83-4c40-a405-dea6c6d2c311 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_512f7b40-c9cb-4546-b67b-c1a673cf36bb a {
+        .logo_bb87e896-cb83-4c40-a405-dea6c6d2c311 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -906,7 +906,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 32)", "edge_data_id": 4546819968}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(32, 64)", "edge_data_id": 4503567424}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_3", "dims": "(64, 32)", "edge_data_id": 4503508864}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "relu_2", "dims": "(16, 64)", "edge_data_id": 4503253760}], "failed": false, "node_type": "Operation"}, "relu_2": {"edges": [{"target": "dot_general_3", "dims": "(16, 64)", "edge_data_id": 4502411840}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "output_0", "dims": "(16, 32)", "edge_data_id": 4503341824}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 32)", "edge_data_id": 4614525376}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(32, 64)", "edge_data_id": 4614533888}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_3", "dims": "(64, 32)", "edge_data_id": 4614347968}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "relu_2", "dims": "(16, 64)", "edge_data_id": 4606226304}], "failed": false, "node_type": "Operation"}, "relu_2": {"edges": [{"target": "dot_general_3", "dims": "(16, 64)", "edge_data_id": 4614523584}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "output_0", "dims": "(16, 32)", "edge_data_id": 4607023488}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
     const module_info = {"scope_MLP_dense0": {"type": "dense0", "parameters": {}, "attributes": {}}, "scope_MLP": {"type": "MLP", "parameters": {}, "attributes": {}}, "scope_MLP_dense1": {"type": "dense1", "parameters": {}, "attributes": {}}};
     const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [32, 64], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "relu_2": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}], "keyword_args": {"jvp_jaxpr_fun": "Wrapped function:\n\nCore: memoized\n", "num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_3": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}, {"_type": "tensor", "shape": [64, 32], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
     const parent_module_to_nodes = {"scope_MLP_dense0": ["dot_general_1"], "scope_MLP": ["dot_general_1", "relu_2", "dot_general_3"], "scope_MLP_dense1": ["dot_general_3"]};
@@ -956,10 +956,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb` : `custom-tooltip_smaller_512f7b40-c9cb-4546-b67b-c1a673cf36bb`;
+        tooltip.className = !smaller ? `custom-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311` : `custom-tooltip_smaller_bb87e896-cb83-4c40-a405-dea6c6d2c311`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb`);
+        const container = document.getElementById(`graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -971,7 +971,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -1006,7 +1006,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+            if (isDimension) cell.className = "shape-dimension_bb87e896-cb83-4c40-a405-dea6c6d2c311";
         };
 
         addCell(label ? "(" : "");
@@ -1070,7 +1070,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+        row.className = "shape-connectors_bb87e896-cb83-4c40-a405-dea6c6d2c311";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1090,7 +1090,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_512f7b40-c9cb-4546-b67b-c1a673cf36bb shape-connector_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+            cell.className = "shape-dimension_bb87e896-cb83-4c40-a405-dea6c6d2c311 shape-connector_bb87e896-cb83-4c40-a405-dea6c6d2c311";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1147,16 +1147,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         row.insertCell();
     }
 
+    function shapeComparisonScale(tooltip, containerRect, zoomScale) {
+        const desiredScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const naturalWidth = tooltip.offsetWidth;
+        const naturalHeight = tooltip.offsetHeight;
+        const widthScale = containerRect.width * 0.72 / naturalWidth;
+        const heightScale = containerRect.height * 0.55 / naturalHeight;
+        return Math.min(desiredScale, widthScale, heightScale);
+    }
+
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
-        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const container = document.getElementById("graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311");
+        const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
-        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.transform = "scale(1)";
         tooltip.style.display = "block";
+        const scale = shapeComparisonScale(tooltip, containerRect, zoomScale);
+        tooltip.style.transform = `scale(${scale})`;
 
         const anchorRect = anchorElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         const unclampedLeft = anchorRect.left + anchorRect.width / 2
             - containerRect.left - tooltipRect.width / 2;
@@ -1175,14 +1185,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+        tooltip.className = "shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+        const container = document.getElementById("graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1802,7 +1812,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb").html("");
+        d3.select("#graph_bb87e896-cb83-4c40-a405-dea6c6d2c311").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1869,16 +1879,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb").remove();
+        d3.select("#png-link-container_bb87e896-cb83-4c40-a405-dea6c6d2c311").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node().parentNode;
+            const parent = d3.select("#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
-                .attr("id", "png-error-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+                .insert("div", "#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311")
+                .attr("id", "png-error-container_bb87e896-cb83-4c40-a405-dea6c6d2c311");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                .attr("id", "png-error-message_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1916,21 +1926,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node().parentNode;
+        const parent = d3.select("#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
-            .attr("id", "png-link-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+            .insert("div", "#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311")
+            .attr("id", "png-link-container_bb87e896-cb83-4c40-a405-dea6c6d2c311");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("id", "png-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb.png`)
-            .attr("id", "png-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("download", `jaxviz_graph_bb87e896-cb83-4c40-a405-dea6c6d2c311.png`)
+            .attr("id", "png-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1951,26 +1961,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node().parentNode;
+        const parent = d3.select("#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
-            .attr("id", "svg-link-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+            .insert("div", "#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311")
+            .attr("id", "svg-link-container_bb87e896-cb83-4c40-a405-dea6c6d2c311");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("id", "svg-download-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb.svg`)
-            .attr("id", "svg-save-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("download", `jaxviz_graph_bb87e896-cb83-4c40-a405-dea6c6d2c311.svg`)
+            .attr("id", "svg-save-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        const svg = d3.select("#graph_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1984,7 +1994,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_512f7b40-c9cb-4546-b67b-c1a673cf36bb") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_bb87e896-cb83-4c40-a405-dea6c6d2c311") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -2002,7 +2012,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        .attr("id", "arrowhead_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2014,11 +2024,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        const clusters = inner.selectAll(".boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+        .attr("class", "boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2028,10 +2038,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                group.classed("error_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                group.classed("repeat-container_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
             }
 
             // Parse bounding box coordinates
@@ -2073,13 +2083,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                .attr("class", "collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                .attr("class", "collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2096,7 +2106,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb, .collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        clusters.selectAll(".collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311, .collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2111,19 +2121,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        const edges = inner.selectAll(".edge_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+        .attr("class", "edge-group_bb87e896-cb83-4c40-a405-dea6c6d2c311");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb implied-edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+                return "edge_bb87e896-cb83-4c40-a405-dea6c6d2c311 implied-edge_bb87e896-cb83-4c40-a405-dea6c6d2c311";
             }
-            return "edge_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+            return "edge_bb87e896-cb83-4c40-a405-dea6c6d2c311";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2149,7 +2159,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_512f7b40-c9cb-4546-b67b-c1a673cf36bb)");
+        .attr("marker-end", "url(#arrowhead_bb87e896-cb83-4c40-a405-dea6c6d2c311)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2175,10 +2185,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                labelGroup.classed("has-shape-details_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                .attr("class", "edge-shape-info-badge_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2214,7 +2224,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("class", "edge-label_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2226,7 +2236,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+            const labelGroup = edgeGroup.select(".edge-label_bb87e896-cb83-4c40-a405-dea6c6d2c311");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2267,19 +2277,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        const nodes = inner.selectAll(".node_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+                let classes = "node_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_bb87e896-cb83-4c40-a405-dea6c6d2c311";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2307,12 +2317,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    return "operation_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    return "operation_bb87e896-cb83-4c40-a405-dea6c6d2c311";
                 });
             } else {
                 // Create rectangle
@@ -2322,15 +2332,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_512f7b40-c9cb-4546-b67b-c1a673cf36bb" : "operation_512f7b40-c9cb-4546-b67b-c1a673cf36bb";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_bb87e896-cb83-4c40-a405-dea6c6d2c311";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_bb87e896-cb83-4c40-a405-dea6c6d2c311" : "operation_bb87e896-cb83-4c40-a405-dea6c6d2c311";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        .attr("class", "node-label_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2339,7 +2349,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        .attr("class", "type-indicator_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2357,7 +2367,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        inner.selectAll(".node_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2368,14 +2378,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        .attr("class", "info-button_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        .attr("class", "info-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2391,16 +2401,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb, .info-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            nodeGroup.selectAll(".info-button_bb87e896-cb83-4c40-a405-dea6c6d2c311, .info-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node();
+                const infoButton = nodeGroup.select(".info-button_bb87e896-cb83-4c40-a405-dea6c6d2c311").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+        inner.selectAll(".node_bb87e896-cb83-4c40-a405-dea6c6d2c311")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2422,7 +2432,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb" : "collapse-button-disabled_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("class", isExpandable ? "collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311" : "collapse-button-disabled_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2431,7 +2441,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb" : "collapse-icon-disabled_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+            .attr("class", isExpandable ? "collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311" : "collapse-icon-disabled_bb87e896-cb83-4c40-a405-dea6c6d2c311")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2451,7 +2461,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_512f7b40-c9cb-4546-b67b-c1a673cf36bb, .collapse-icon_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                nodeGroup.selectAll(".collapse-button_bb87e896-cb83-4c40-a405-dea6c6d2c311, .collapse-icon_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2552,16 +2562,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+            clickedNodeElement.classed("highlight-node_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_512f7b40-c9cb-4546-b67b-c1a673cf36bb", false);
+                clickedNodeElement.classed("highlight-node_bb87e896-cb83-4c40-a405-dea6c6d2c311", false);
             }, 2000);
 
-            const popup = d3.select("#popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
-            const moduleTemplate = d3.select("#module-template_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
-            const tensorOpTemplate = d3.select("#tensor-op-template_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
-            const noInfoMessage = d3.select("#no-info_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+            const popup = d3.select("#popup_bb87e896-cb83-4c40-a405-dea6c6d2c311");
+            const moduleTemplate = d3.select("#module-template_bb87e896-cb83-4c40-a405-dea6c6d2c311");
+            const tensorOpTemplate = d3.select("#tensor-op-template_bb87e896-cb83-4c40-a405-dea6c6d2c311");
+            const noInfoMessage = d3.select("#no-info_bb87e896-cb83-4c40-a405-dea6c6d2c311");
             
             const nodeData = adj_list[nodeName];
             
@@ -2569,14 +2579,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_512f7b40-c9cb-4546-b67b-c1a673cf36bb").text(popupTitle);
+            d3.select("#popup-title_bb87e896-cb83-4c40-a405-dea6c6d2c311").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_512f7b40-c9cb-4546-b67b-c1a673cf36bb");
+            const attrNameRow = d3.select("#attr-name-row_bb87e896-cb83-4c40-a405-dea6c6d2c311");
 
             if (attrName) {
-                d3.select("#attr-name-value_512f7b40-c9cb-4546-b67b-c1a673cf36bb").text(attrName);
+                d3.select("#attr-name-value_bb87e896-cb83-4c40-a405-dea6c6d2c311").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2588,31 +2598,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                moduleTemplate.style("display", "block").classed("content-shown_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
                 
-                d3.select("#module-extra-repr_512f7b40-c9cb-4546-b67b-c1a673cf36bb").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_bb87e896-cb83-4c40-a405-dea6c6d2c311").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node();
+                const attributesContainer = d3.select("#module-attributes_bb87e896-cb83-4c40-a405-dea6c6d2c311").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node();
+                const parametersContainer = d3.select("#module-parameters_bb87e896-cb83-4c40-a405-dea6c6d2c311").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_bb87e896-cb83-4c40-a405-dea6c6d2c311").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                noInfoMessage.style("display", "block").classed("content-shown_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_bb87e896-cb83-4c40-a405-dea6c6d2c311").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2628,19 +2638,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_512f7b40-c9cb-4546-b67b-c1a673cf36bb").node().scrollTop = 0;
+            d3.select("#popup-content_bb87e896-cb83-4c40-a405-dea6c6d2c311").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb").style("display", "none");
+            d3.select("#popup_bb87e896-cb83-4c40-a405-dea6c6d2c311").style("display", "none");
         }
         
-        d3.select(".popup-close_512f7b40-c9cb-4546-b67b-c1a673cf36bb").on("click", closePopup);
+        d3.select(".popup-close_bb87e896-cb83-4c40-a405-dea6c6d2c311").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_512f7b40-c9cb-4546-b67b-c1a673cf36bb`);
+        const popup = document.getElementById(`popup_bb87e896-cb83-4c40-a405-dea6c6d2c311`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_512f7b40-c9cb-4546-b67b-c1a673cf36bb');
+            const editorContainers = popup.querySelectorAll('.json-viewer_bb87e896-cb83-4c40-a405-dea6c6d2c311');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2719,30 +2729,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                    const targetElement = inner.selectAll(".node_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                        targetElement.classed("highlight-node_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_512f7b40-c9cb-4546-b67b-c1a673cf36bb", false);
+                            targetElement.classed("highlight-node_bb87e896-cb83-4c40-a405-dea6c6d2c311", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_512f7b40-c9cb-4546-b67b-c1a673cf36bb")
+                    const targetElement = inner.selectAll(".boundary-box_bb87e896-cb83-4c40-a405-dea6c6d2c311")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_512f7b40-c9cb-4546-b67b-c1a673cf36bb", true);
+                        targetElement.classed("highlight-cluster_bb87e896-cb83-4c40-a405-dea6c6d2c311", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_512f7b40-c9cb-4546-b67b-c1a673cf36bb", false);
+                            targetElement.classed("highlight-cluster_bb87e896-cb83-4c40-a405-dea6c6d2c311", false);
                         }, 2000); // Match the animation duration
                     }
                 }

@@ -2,7 +2,7 @@
 
 The batch is split across the data axis while the hidden features are split
 across the model axis. This makes the hidden activation use both mesh axes at
-once and lets the low-level graph reveal the model-parallel communication.
+once and lets the per-device graph reveal the model-parallel communication.
 """
 import jax
 import jax.numpy as jnp
@@ -50,5 +50,5 @@ with jax.set_mesh(mesh):
     example_input = jax.device_put(jnp.ones((16, 32)), jax.P("data", None))
 
 trace_context = jax.set_mesh(mesh)
-levels = ("high", "low")
+views = ("global", "per_device")
 trace_kwargs = {"collapse_modules_after_depth": 2}

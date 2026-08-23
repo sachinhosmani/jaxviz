@@ -2,12 +2,12 @@
 
 This is a "school 1" model: we only annotate how the weights are sharded across a
 device mesh and let the XLA compiler insert the communication (an all-reduce). It's
-meant for ``trace_model(..., level="low")``, which shows the compiler-inserted
-collectives; ``level="high"`` shows the same model with no communication.
+meant for ``trace_model(..., view="per_device")``, which shows the compiler-inserted
+collectives; ``view="global"`` shows the same model with no communication.
 
 Requires a recent jax/flax (make_mesh, AxisType.Auto, nnx.use_eager_sharding) and a
 mesh in context — enter ``trace_context`` around the trace. Exposes ``model``,
-``example_input``, ``trace_context``, and ``levels`` for the examples generator.
+``example_input``, ``trace_context``, and ``views`` for the examples generator.
 """
 import jax
 import jax.numpy as jnp
@@ -42,4 +42,4 @@ with jax.set_mesh(mesh):
 
 example_input = jnp.ones((16, 32))
 trace_context = jax.set_mesh(mesh)   # entered around tracing so the mesh is active
-levels = ("high", "low")             # generate both graph types for this example
+views = ("global", "per_device")     # generate both program views for this example

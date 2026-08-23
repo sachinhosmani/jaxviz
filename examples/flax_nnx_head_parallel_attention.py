@@ -78,7 +78,7 @@ class HeadParallelAttention(nnx.Module):
 
         context = context.transpose(0, 2, 1, 3)
         context = context.reshape(x.shape)
-        # Expand this module in the low-level graph to see its all-reduce.
+        # Expand this module in the per-device graph to see its all-reduce.
         return self.output(context)
 
 
@@ -91,5 +91,5 @@ with jax.set_mesh(mesh):
     )
 
 trace_context = jax.set_mesh(mesh)
-levels = ("high", "low")
+views = ("global", "per_device")
 trace_kwargs = {"collapse_modules_after_depth": 1}

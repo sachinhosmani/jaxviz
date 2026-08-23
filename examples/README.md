@@ -9,7 +9,7 @@ Create `examples/my_example.py` with:
 
 - `model`: the callable or module to trace.
 - `example_input`: one example argument, or `example_args`: a tuple of arguments.
-- `levels` (optional): a tuple containing `"high"`, `"low"`, or both.
+- `views` (optional): a tuple containing `"global"`, `"per_device"`, or both.
 - `trace_context` (optional): a context manager active while tracing.
 - `trace_kwargs` (optional): extra keyword arguments passed to `trace_model`.
 - `title` (optional): the page title; otherwise the module docstring is used.
@@ -23,10 +23,10 @@ removed and the matching `trace_model` call is appended automatically.
 python scripts/examples_generator.py
 ```
 
-Generate one example or one graph level while iterating:
+Generate one example or one program view while iterating:
 
 ```bash
-python scripts/examples_generator.py flax_nnx_mlp_sharded --level low
+python scripts/examples_generator.py flax_nnx_mlp_sharded --view per_device
 ```
 
 Pages are written to `examples/generated/`. The files are standalone and can be

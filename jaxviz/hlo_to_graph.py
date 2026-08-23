@@ -113,7 +113,7 @@ def _partition_axes(partitions, mesh_shape):
 
 
 def _shape_info(local_dims, global_dims, mesh_shape=None):
-    """Structured shape data used by the low-level edge visualization."""
+    """Structured shape data used by the per-device edge visualization."""
     local = list(local_dims)
     if global_dims is None:
         return {
@@ -570,7 +570,7 @@ def build_hlo_graph(lowered, mesh_shape=None):
 
     # The root container is the model's top module: the outermost user-code
     # `<Class>.__call__` frame (e.g. MLP), so the whole graph nests under it like
-    # the high-level graph does. Detected once from any op's frame chain.
+    # the global graph does. Detected once from any op's frame chain.
     root_class = None
     for ln in body:
         sid_m = _STACK_ID_RE.search(ln)
@@ -740,7 +740,7 @@ def build_hlo_graph(lowered, mesh_shape=None):
      module_info, node_to_module_path) = _build_hierarchy(node_modpath, adj_list)
 
     # A container's display label is its module name (dense1), not its raw id
-    # (mod_MLP_dense1) — mirror what the high-level graph registers.
+    # (mod_MLP_dense1) — mirror what the global graph registers.
     for mid, info in module_info.items():
         graph_node_display_names[mid] = info["name"]
         graph_node_name_to_without_suffix[mid] = info["name"]

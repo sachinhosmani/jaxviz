@@ -3,10 +3,10 @@
 Usage:
     python scripts/examples_generator.py
     python scripts/examples_generator.py flax_nnx_mlp_sharded
-    python scripts/examples_generator.py flax_nnx_mlp_sharded --level low
+    python scripts/examples_generator.py flax_nnx_mlp_sharded --view per_device
 
 Each ``examples/*.py`` file defines ``model`` and either ``example_input`` or
-``example_args``. Optional metadata controls page titles, trace levels, trace
+``example_args``. Optional metadata controls page titles, trace views, trace
 context, and trace keyword arguments. Displayed code is derived from the source
 file, so adding an example does not require maintaining a separate snippet.
 """
@@ -27,7 +27,7 @@ GENERATED_DIR = EXAMPLES_DIR / "generated"
 METADATA_VARS = {
     "code_contents",
     "description",
-    "levels",
+    "views",
     "title",
     "trace_context",
     "trace_kwargs",
@@ -98,7 +98,7 @@ def _add_trace_import(source):
     return "\n".join(lines)
 
 
-def build_display_code(path, level, module):
+def build_display_code(path, view, module):
     override = getattr(module, "code_contents", None)
     if override:
         return override.strip() + "\n"
@@ -107,7 +107,7 @@ def build_display_code(path, level, module):
     source = _add_trace_import(source).rstrip()
     argument_expression = "*example_args" if hasattr(module, "example_args") else "example_input"
     trace_kwargs = getattr(module, "trace_kwargs", {})
-    keyword_expressions = [f"level={level!r}"]
+    keyword_expressions = [f"view={view!r}"]
     keyword_expressions.extend(f"{name}={value!r}" for name, value in trace_kwargs.items())
     trace_call = f"trace_model(model, {argument_expression}, {', '.join(keyword_expressions)})"
 
@@ -128,7 +128,7 @@ def example_title(path, module):
     return path.stem.replace("_", " ").title()
 
 
-def render_example_page(title, level, code_contents, graph_html):
+def render_example_page(title, code_contents, graph_html):
     template_text = (
         resources.files("jaxviz.templates")
         .joinpath("example.html")
@@ -138,13 +138,12 @@ def render_example_page(title, level, code_contents, graph_html):
     return template.safe_substitute({
         "page_title": html.escape(f"{title} · JAXViz"),
         "example_title": html.escape(title),
-        "level": html.escape(level),
         "code_contents": html.escape(code_contents),
         "graph_html": graph_html,
     })
 
 
-def generate_example(path, selected_levels=None):
+def generate_example(path, selected_views=None):
     module = load_example(path)
     model = getattr(module, "model")
     if hasattr(module, "example_args"):
@@ -152,10 +151,10 @@ def generate_example(path, selected_levels=None):
     else:
         example_args = (getattr(module, "example_input"),)
 
-    levels = tuple(getattr(module, "levels", ("high",)))
-    if selected_levels:
-        levels = tuple(level for level in levels if level in selected_levels)
-    if not levels:
+    views = tuple(getattr(module, "views", ("global",)))
+    if selected_views:
+        views = tuple(view for view in views if view in selected_views)
+    if not views:
         return []
 
     trace_context = getattr(module, "trace_context", contextlib.nullcontext())
@@ -164,14 +163,14 @@ def generate_example(path, selected_levels=None):
     output_paths = []
 
     with trace_context:
-        for level in levels:
-            suffix = f"_{level}" if len(getattr(module, "levels", ("high",))) > 1 else ""
+        for view in views:
+            suffix = f"_{view}" if len(getattr(module, "views", ("global",))) > 1 else ""
             output_path = GENERATED_DIR / f"{path.stem}{suffix}.html"
-            print(f"Generating {path.stem} ({level})...")
+            print(f"Generating {path.stem} ({view})...")
             graph_html = trace_model(
                 model,
                 *example_args,
-                level=level,
+                view=view,
                 height="100%",
                 width="100%",
                 return_html=True,
@@ -179,8 +178,7 @@ def generate_example(path, selected_levels=None):
             )
             page_html = render_example_page(
                 title,
-                level,
-                build_display_code(path, level, module),
+                build_display_code(path, view, module),
                 graph_html,
             )
             output_path.write_text(page_html, encoding="utf-8")
@@ -190,7 +188,7 @@ def generate_example(path, selected_levels=None):
     return output_paths
 
 
-def generate_all(example_names=None, selected_levels=None):
+def generate_all(example_names=None, selected_views=None):
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     requested_names = set(example_names or ())
     available_paths = {
@@ -205,7 +203,7 @@ def generate_all(example_names=None, selected_levels=None):
     names = sorted(requested_names) if requested_names else sorted(available_paths)
     output_paths = []
     for name in names:
-        output_paths.extend(generate_example(available_paths[name], selected_levels))
+        output_paths.extend(generate_example(available_paths[name], selected_views))
     return output_paths
 
 
@@ -213,15 +211,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("examples", nargs="*", help="Example file stems to generate")
     parser.add_argument(
-        "--level",
+        "--view",
         action="append",
-        choices=("high", "low"),
-        dest="levels",
-        help="Only generate this level; may be passed more than once",
+        choices=("global", "per_device"),
+        dest="views",
+        help="Only generate this view; may be passed more than once",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    generate_all(args.examples, set(args.levels or ()))
+    generate_all(args.examples, set(args.views or ()))

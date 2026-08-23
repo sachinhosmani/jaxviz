@@ -18,17 +18,17 @@ import jax.numpy as jnp
 model = lambda x: x
 example_input = jnp.ones((2,))
 trace_context = jax.set_mesh(mesh)
-levels = ("high", "low")
+views = ("global", "per_device")
 '''
     )
     module = SimpleNamespace(example_input=object(), trace_kwargs={"show_constants": True})
 
-    code = build_display_code(source_path, "low", module)
+    code = build_display_code(source_path, "per_device", module)
 
     assert '"""Example title."""' not in code
-    assert "levels =" not in code
+    assert "views =" not in code
     assert "trace_context =" not in code
     assert "from jaxviz import trace_model" in code
     assert "with jax.set_mesh(mesh):" in code
-    assert "level='low'" in code
+    assert "view='per_device'" in code
     assert "show_constants=True" in code

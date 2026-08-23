@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flax NNX MLP, tensor-parallel sharded with compiler-driven (&quot;Auto&quot;) sharding · JAXViz</title>
+    <title>Flax NNX self-attention with data and head parallelism · JAXViz</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/python.min.js"></script>
@@ -161,36 +161,89 @@ from jaxviz import trace_model
 
 
 Auto = jax.sharding.AxisType.Auto
-mesh = jax.make_mesh((8,), (&quot;model&quot;,), axis_types=(Auto,))
+mesh = jax.make_mesh(
+    (2, 4),
+    (&quot;data&quot;, &quot;model&quot;),
+    axis_types=(Auto, Auto),
+)
 nnx.use_eager_sharding(True)
 
 
-class MLP(nnx.Module):
+@jax.jit
+def attention_weights(query, key):
+    scale = jnp.sqrt(jnp.asarray(query.shape[-1], dtype=query.dtype))
+    scores = jnp.einsum(&quot;bhsd,bhtd-&gt;bhst&quot;, query, key) / scale
+    return jax.nn.softmax(scores, axis=-1)
+
+
+class HeadParallelAttention(nnx.Module):
     def __init__(self, rngs):
+        self.num_heads = 8
+        self.head_dim = 16
+        embedding_dim = self.num_heads * self.head_dim
         init = nnx.initializers.lecun_normal()
-        self.dense0 = nnx.Linear(
-            32, 64, use_bias=False, rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (None, &quot;model&quot;)),  # column-parallel
+
+        # Column-parallel projections assign complete heads to model shards.
+        projection = nnx.with_partitioning(init, (None, &quot;model&quot;))
+        self.query = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
         )
-        self.dense1 = nnx.Linear(
-            64, 32, use_bias=False, rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),  # row-parallel
+        self.key = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
         )
+        self.value = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
+        )
+        # The row-parallel output projection combines the head shards.
+        self.output = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),
+        )
+
+    def split_heads(self, x):
+        batch, sequence, _ = x.shape
+        x = x.reshape(batch, sequence, self.num_heads, self.head_dim)
+        return x.transpose(0, 2, 1, 3)
 
     def __call__(self, x):
-        x = self.dense0(x)
-        x = nnx.relu(x)
-        x = self.dense1(x)
-        return x
+        query = self.split_heads(self.query(x))
+        key = self.split_heads(self.key(x))
+        value = self.split_heads(self.value(x))
+
+        probabilities = attention_weights(query, key)
+        context = jnp.einsum(&quot;bhst,bhtd-&gt;bhsd&quot;, probabilities, value)
+
+        context = context.transpose(0, 2, 1, 3)
+        context = context.reshape(x.shape)
+        # Expand this module in the per-device graph to see its all-reduce.
+        return self.output(context)
 
 
 with jax.set_mesh(mesh):
-    model = MLP(nnx.Rngs(0))
-
-example_input = jnp.ones((16, 32))
+    model = HeadParallelAttention(nnx.Rngs(0))
+    # Global (8, 32, 128) becomes local (4, 32, 128) across data replicas.
+    example_input = jax.device_put(
+        jnp.ones((8, 32, 128)),
+        jax.P(&quot;data&quot;, None, None),
+    )
 
 with jax.set_mesh(mesh):
-    trace_model(model, example_input, level=&#x27;low&#x27;)
+    trace_model(model, example_input, view=&#x27;global&#x27;, collapse_modules_after_depth=1)
 </code></pre>
                 </div>
             </section>
@@ -198,124 +251,124 @@ with jax.set_mesh(mesh):
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
-    <div id="graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9"></div>
-    <div class="logo_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
+                <div class="graph-stage"><div id="graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
+    <div id="graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825"></div>
+    <div class="logo_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" class="popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="display: none;">
-        <div class="popup-header_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
-            <h3 id="popup-title_dabb42d7-8cb8-43db-befc-f9a8d3f198f9"></h3>
-            <span class="popup-close_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">✕</span>
+    <div id="popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" class="popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="display: none;">
+        <div class="popup-header_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
+            <h3 id="popup-title_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825"></h3>
+            <span class="popup-close_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">✕</span>
         </div>
-        <div id="popup-content_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" class="popup-content_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
-            <div id="common-info_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
-                <p id="attr-name-row_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" class="popup-content_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
+            <div id="common-info_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
+                <p id="attr-name-row_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="display:none;">
-                <details open id="module-parameters-details_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
+            <div id="module-template_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="display:none;">
+                <details open id="module-parameters-details_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" class="json-viewer_dabb42d7-8cb8-43db-befc-f9a8d3f198f9"></div>
+                    <div id="module-parameters_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" class="json-viewer_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825"></div>
                 </details>
-                <details open id="module-attributes-details_dabb42d7-8cb8-43db-befc-f9a8d3f198f9">
+                <details open id="module-attributes-details_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" class="json-viewer_dabb42d7-8cb8-43db-befc-f9a8d3f198f9"></div>
+                    <div id="module-attributes_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" class="json-viewer_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="display:none;">
+            <div id="tensor-op-template_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" class="json-viewer_dabb42d7-8cb8-43db-befc-f9a8d3f198f9"></div>
+                <div id="tensor-op-parameters_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" class="json-viewer_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825"></div>
             </div>
-            <p id="no-info_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        text.node-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        text.type-indicator_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        text.collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             stroke: #797979;
             fill: none;
         }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.input_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #FF9AFF; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: rgb(235 235 235); }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.input_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #FF9AFF; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: rgb(235 235 235); }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.output_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #74e071; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.failed_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: rgb(224 15 15); }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.module_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #8BDEDB; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect.operation_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #FEBC5A; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.output_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #74e071; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.failed_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: rgb(224 15 15); }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.module_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #8BDEDB; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect.operation_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #FEBC5A; }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse.input_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #FF9AFF; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse.constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: rgb(235 235 235); }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse.output_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #74e071; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse.parameter_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: #B9CCF3; }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse.failed_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 { fill: rgb(224 15 15); }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse.input_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #FF9AFF; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse.constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: rgb(235 235 235); }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse.output_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #74e071; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse.parameter_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: #B9CCF3; }
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse.failed_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 { fill: rgb(224 15 15); }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .edgeLabelGroup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             pointer-events: none;
         }
-        #arrowhead_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 path {
+        #arrowhead_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 path {
             fill: #333333;;
         }
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect,
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 ellipse {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect,
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 .type-indicator_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 .type-indicator_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.error_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.error_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.error_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 > rect:first-of-type {
+        .boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.error_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             height: 100%;
         }
         
-        .popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -330,7 +383,7 @@ with jax.set_mesh(mesh):
             flex-direction: column;
         }
 
-        .popup-header_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .popup-header_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: sticky;
             top: 0;
             background: white;
@@ -342,12 +395,12 @@ with jax.set_mesh(mesh):
             z-index: 1;
         }
 
-        .popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 h3 {
+        .popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .popup-content_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -355,87 +408,87 @@ with jax.set_mesh(mesh):
             flex-grow: 1;
         }
 
-        .popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 pre {
+        .popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .popup-close_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #popup-title_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: relative;
         }
 
-        #graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 pre {
+        #graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             pointer-events: none;
         }
-        .boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 text {
+        .boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             pointer-events: none;
         }
-        .boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 text {
+        .boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 text {
+        .edge-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9, .info-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825, .info-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover, .info-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        .collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover, .info-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9, .info-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825, .info-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .collapse-button-disabled_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        .collapse-button-disabled_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .collapse-icon-disabled_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -444,23 +497,23 @@ with jax.set_mesh(mesh):
         }
 
         /* Edge hover styles */
-        .edge-group_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 path {
+        .edge-group_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 path {
             pointer-events: stroke;
         }
 
-        .edge-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .edge-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             pointer-events: all;
         }
 
-        .edge-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.has-shape-details_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .edge-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.has-shape-details_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 circle {
+        .edge-shape-info-badge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 text {
+        .edge-shape-info-badge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -502,50 +555,50 @@ with jax.set_mesh(mesh):
             }
         }
 
-        .highlight-cluster_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 > rect:first-of-type {
+        .highlight-cluster_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .highlight-node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        text.node-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 .node-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 .node-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             font-size: 0.7rem;
         }
 
-        .popup-content_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 summary {
+        .popup-content_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.input_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect,
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.output_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect,
-        .node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.input_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect,
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.output_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect,
+        .node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #png-error-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #png-error-message_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -556,13 +609,13 @@ with jax.set_mesh(mesh):
             text-align: left;
         }
 
-        #png-link-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #png-link-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #png-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -572,11 +625,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #png-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        #png-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #png-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -585,18 +638,18 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #png-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        #png-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #svg-link-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #svg-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -606,11 +659,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #svg-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        #svg-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        #svg-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -619,11 +672,11 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #svg-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9:hover {
+        #svg-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .custom-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -639,7 +692,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .custom-tooltip_smaller_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .custom-tooltip_smaller_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -655,7 +708,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -669,71 +722,71 @@ with jax.set_mesh(mesh):
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 table {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 th {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-dimension_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-dimension_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 svg {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 line {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 polygon {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 rect {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 td.shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 text {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 td.shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 tr.shape-connectors_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 th {
+        .shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 tr.shape-connectors_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.implied-edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.implied-edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 {
+        .logo_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 a {
+        .logo_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -894,20 +947,20 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"param_1": {"edges": [{"target": "dot", "dims": "(32, 8)", "shape_info": {"global": [32, 64], "local": [32, 8], "partitions": [1, 8], "axes": [[], [{"name": "model", "size": 8}]], "status": "verified"}, "edge_data_id": "param_1->dot"}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_1", "dims": "(8, 32)", "shape_info": {"global": [64, 32], "local": [8, 32], "partitions": [8, 1], "axes": [[{"name": "model", "size": 8}], []], "status": "verified"}, "edge_data_id": "param_2->dot_1"}], "failed": false, "node_type": "Parameter"}, "param": {"edges": [{"target": "dot", "dims": "(16, 32)", "shape_info": {"global": [16, 32], "local": [16, 32], "partitions": [1, 1], "axes": [[], []], "status": "verified"}, "edge_data_id": "param->dot"}], "failed": false, "node_type": "Input"}, "dot": {"edges": [{"target": "max_7", "dims": "(16, 8)", "shape_info": {"global": [16, 64], "local": [16, 8], "partitions": [1, 8], "axes": [[], [{"name": "model", "size": 8}]], "status": "verified"}, "edge_data_id": "dot->max_7"}], "failed": false, "node_type": "Operation"}, "constant_2_clone": {"edges": [{"target": "max_6", "dims": "( )", "shape_info": {"global": null, "local": [], "partitions": null, "axes": null, "status": "unavailable"}, "edge_data_id": "constant_2_clone->max_6"}], "failed": false, "node_type": "Constant"}, "max_6": {"edges": [{"target": "max_7", "dims": "(16, 8)", "shape_info": {"global": [16, 64], "local": [16, 8], "partitions": [1, 8], "axes": [[], [{"name": "model", "size": 8}]], "status": "verified"}, "edge_data_id": "max_6->max_7"}], "failed": false, "node_type": "Operation"}, "max_7": {"edges": [{"target": "dot_1", "dims": "(16, 8)", "shape_info": {"global": [16, 64], "local": [16, 8], "partitions": [1, 8], "axes": [[], [{"name": "model", "size": 8}]], "status": "verified"}, "edge_data_id": "max_7->dot_1"}], "failed": false, "node_type": "Operation"}, "dot_1": {"edges": [{"target": "all_reduce", "dims": "(16, 32)", "shape_info": {"global": [16, 32], "local": [16, 32], "partitions": [1, 1], "axes": [[], []], "status": "verified"}, "edge_data_id": "dot_1->all_reduce"}], "failed": false, "node_type": "Operation"}, "all_reduce": {"edges": [{"target": "output_0", "dims": "(16, 32)", "shape_info": {"global": [16, 32], "local": [16, 32], "partitions": [1, 1], "axes": [[], []], "status": "verified"}, "edge_data_id": "all_reduce->output_0"}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
-    const module_info = {"mod_MLP": {"name": "MLP", "path": "MLP", "depth": 0}, "mod_MLP_dense0": {"name": "dense0", "path": "MLP/dense0", "depth": 1}, "mod_MLP_relu": {"name": "relu", "path": "MLP/relu", "depth": 1}, "mod_MLP_dense1": {"name": "dense1", "path": "MLP/dense1", "depth": 1}};
-    const func_info = {"param_1": {"positional_args": [], "keyword_args": {}}, "param_2": {"positional_args": [], "keyword_args": {}}, "param": {"positional_args": [], "keyword_args": {}}, "dot": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [32, 8], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{1}", "rhs_contracting_dims": "{0}"}}, "constant_2_clone": {"positional_args": [], "keyword_args": {}}, "max_6": {"positional_args": [0.0], "keyword_args": {"dimensions": "{}"}}, "max_7": {"positional_args": [{"_type": "tensor", "shape": [16, 8], "dtype": "f32"}, {"_type": "tensor", "shape": [16, 8], "dtype": "f32"}], "keyword_args": {}}, "dot_1": {"positional_args": [{"_type": "tensor", "shape": [16, 8], "dtype": "f32"}, {"_type": "tensor", "shape": [8, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{1}", "rhs_contracting_dims": "{0}"}}, "all_reduce": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "f32"}], "keyword_args": {"channel_id": "1", "replica_groups": "mesh['axis_0'=1,'axis_1'=8] {'axis_1'}", "use_global_device_ids": "true", "to_apply": "%add.clone"}}};
-    const parent_module_to_nodes = {"mod_MLP": ["mod_MLP_dense0", "mod_MLP_relu", "mod_MLP_dense1", "constant_2_clone"], "mod_MLP_dense0": ["param_1", "dot"], "mod_MLP_dense1": ["param_2", "dot_1", "all_reduce"], "mod_MLP_relu": ["max_6", "max_7"]};
-    const parent_module_to_depth = {"mod_MLP": 0, "mod_MLP_dense0": 1, "mod_MLP_relu": 1, "mod_MLP_dense1": 1};
-    const graph_node_name_to_without_suffix = {"param_1": "param", "param_2": "param", "param": "input", "dot": "dot", "constant_2_clone": "constant", "max_6": "broadcast", "max_7": "maximum", "dot_1": "dot", "all_reduce": "all-reduce", "output_0": "output", "mod_MLP": "MLP", "mod_MLP_dense0": "dense0", "mod_MLP_relu": "relu", "mod_MLP_dense1": "dense1"};
-    const graph_node_display_names = {"param_1": "dense0.kernel", "param_2": "dense1.kernel", "param": "args[0]", "dot": "dot", "constant_2_clone": "constant", "max_6": "broadcast", "max_7": "maximum", "dot_1": "dot", "all_reduce": "all-reduce", "output_0": "output_0", "mod_MLP": "MLP", "mod_MLP_dense0": "dense0", "mod_MLP_relu": "relu", "mod_MLP_dense1": "dense1"};
-    const node_to_attr_name = {"param_1": "kernel", "param_2": "kernel"};
-    const ancestor_map = {"mod_MLP": null, "mod_MLP_dense0": "mod_MLP", "mod_MLP_relu": "mod_MLP", "mod_MLP_dense1": "mod_MLP", "param_1": "mod_MLP_dense0", "param_2": "mod_MLP_dense1", "param": null, "dot": "mod_MLP_dense0", "constant_2_clone": "mod_MLP", "max_6": "mod_MLP_relu", "max_7": "mod_MLP_relu", "dot_1": "mod_MLP_dense1", "all_reduce": "mod_MLP_dense1", "output_0": null};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(8, 32, 128)", "edge_data_id": 4607189824}, {"target": "dot_general_4", "dims": "(8, 32, 128)", "edge_data_id": 4607189824}, {"target": "dot_general_7", "dims": "(8, 32, 128)", "edge_data_id": 4607189824}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(128, 128)", "edge_data_id": 4606127104}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_4", "dims": "(128, 128)", "edge_data_id": 4613874432}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_7", "dims": "(128, 128)", "edge_data_id": 4613875136}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "dot_general_14", "dims": "(128, 128)", "edge_data_id": 4614082624}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "reshape_2", "dims": "(8, 32, 128)", "edge_data_id": 4607386560}], "failed": false, "node_type": "Operation"}, "reshape_2": {"edges": [{"target": "transpose_3", "dims": "(8, 32, 8, 16)", "edge_data_id": 4607182912}], "failed": false, "node_type": "Operation"}, "transpose_3": {"edges": [{"target": "attention_weights_10", "dims": "(8, 8, 32, 16)", "edge_data_id": 4613874112}], "failed": false, "node_type": "Operation"}, "dot_general_4": {"edges": [{"target": "reshape_5", "dims": "(8, 32, 128)", "edge_data_id": 4613874624}], "failed": false, "node_type": "Operation"}, "reshape_5": {"edges": [{"target": "transpose_6", "dims": "(8, 32, 8, 16)", "edge_data_id": 4613874752}], "failed": false, "node_type": "Operation"}, "transpose_6": {"edges": [{"target": "attention_weights_10", "dims": "(8, 8, 32, 16)", "edge_data_id": 4613874816}], "failed": false, "node_type": "Operation"}, "dot_general_7": {"edges": [{"target": "reshape_8", "dims": "(8, 32, 128)", "edge_data_id": 4613827904}], "failed": false, "node_type": "Operation"}, "reshape_8": {"edges": [{"target": "transpose_9", "dims": "(8, 32, 8, 16)", "edge_data_id": 4613875328}], "failed": false, "node_type": "Operation"}, "transpose_9": {"edges": [{"target": "dot_general_11", "dims": "(8, 8, 32, 16)", "edge_data_id": 4613875264}], "failed": false, "node_type": "Operation"}, "attention_weights_10": {"edges": [{"target": "dot_general_11", "dims": "(8, 8, 32, 32)", "edge_data_id": 4613876864}], "failed": false, "node_type": "Operation"}, "dot_general_11": {"edges": [{"target": "transpose_12", "dims": "(8, 8, 32, 16)", "edge_data_id": 4614080384}], "failed": false, "node_type": "Operation"}, "transpose_12": {"edges": [{"target": "reshape_13", "dims": "(8, 32, 8, 16)", "edge_data_id": 4614078848}], "failed": false, "node_type": "Operation"}, "reshape_13": {"edges": [{"target": "dot_general_14", "dims": "(8, 32, 128)", "edge_data_id": 4614082368}], "failed": false, "node_type": "Operation"}, "dot_general_14": {"edges": [{"target": "output_0", "dims": "(8, 32, 128)", "edge_data_id": 4614082816}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const module_info = {"scope_HeadParallelAttention_query": {"type": "query", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention": {"type": "HeadParallelAttention", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_key": {"type": "key", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_value": {"type": "value", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_bhst_bhtd__bhsd": {"type": "bhst,bhtd->bhsd", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_output": {"type": "output", "parameters": {}, "attributes": {}}};
+    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "reshape_2": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_3": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "dot_general_4": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "reshape_5": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_6": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "dot_general_7": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "reshape_8": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_9": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "attention_weights_10": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"in_shardings": "(UnspecifiedValue, UnspecifiedValue)", "out_shardings": "(UnspecifiedValue,)", "in_layouts": "(None, None)", "out_layouts": "(None,)", "donated_invars": "(False, False)", "ctx_mesh": "Mesh('data': 2, 'model': 4, axis_types=(Auto, Auto))", "name": "attention_weights", "keep_unused": "False", "inline": "False", "compiler_options_kvs": "()"}}, "dot_general_11": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((3,), (2,)), ((0, 1), (0, 1)))", "precision": "None", "preferred_element_type": "float32", "out_sharding": "None"}}, "transpose_12": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "reshape_13": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 128)", "dimensions": "None", "sharding": "None"}}, "dot_general_14": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
+    const parent_module_to_nodes = {"scope_HeadParallelAttention_query": ["dot_general_1"], "scope_HeadParallelAttention": ["dot_general_1", "reshape_2", "transpose_3", "dot_general_4", "reshape_5", "transpose_6", "dot_general_7", "reshape_8", "transpose_9", "attention_weights_10", "dot_general_11", "transpose_12", "reshape_13", "dot_general_14"], "scope_HeadParallelAttention_key": ["dot_general_4"], "scope_HeadParallelAttention_value": ["dot_general_7"], "scope_HeadParallelAttention_bhst_bhtd__bhsd": ["dot_general_11"], "scope_HeadParallelAttention_output": ["dot_general_14"]};
+    const parent_module_to_depth = {"scope_HeadParallelAttention_query": 1, "scope_HeadParallelAttention": 2, "scope_HeadParallelAttention_key": 1, "scope_HeadParallelAttention_value": 1, "scope_HeadParallelAttention_bhst_bhtd__bhsd": 1, "scope_HeadParallelAttention_output": 1};
+    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_query": "query", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "reshape_2": "reshape", "transpose_3": "transpose", "scope_HeadParallelAttention_key": "key", "dot_general_4": "dot_general", "reshape_5": "reshape", "transpose_6": "transpose", "scope_HeadParallelAttention_value": "value", "dot_general_7": "dot_general", "reshape_8": "reshape", "transpose_9": "transpose", "attention_weights_10": "attention_weights", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "bhst,bhtd->bhsd", "dot_general_11": "dot_general", "transpose_12": "transpose", "reshape_13": "reshape", "scope_HeadParallelAttention_output": "output", "dot_general_14": "dot_general", "output_0": "output"};
+    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_query": "query", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "reshape_2": "reshape", "transpose_3": "transpose", "scope_HeadParallelAttention_key": "key", "dot_general_4": "dot_general", "reshape_5": "reshape", "transpose_6": "transpose", "scope_HeadParallelAttention_value": "value", "dot_general_7": "dot_general", "reshape_8": "reshape", "transpose_9": "transpose", "attention_weights_10": "attention_weights", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "bhst,bhtd->bhsd", "dot_general_11": "dot_general", "transpose_12": "transpose", "reshape_13": "reshape", "scope_HeadParallelAttention_output": "output", "dot_general_14": "dot_general", "output_0": "output_0"};
+    const node_to_attr_name = {};
+    const ancestor_map = {"param_0": "scope_HeadParallelAttention_query", "scope_HeadParallelAttention_query": "scope_HeadParallelAttention", "param_1": "scope_HeadParallelAttention_key", "scope_HeadParallelAttention_key": "scope_HeadParallelAttention", "param_2": "scope_HeadParallelAttention_value", "scope_HeadParallelAttention_value": "scope_HeadParallelAttention", "param_3": "scope_HeadParallelAttention_output", "scope_HeadParallelAttention_output": "scope_HeadParallelAttention", "dot_general_1": "scope_HeadParallelAttention_query", "reshape_2": "scope_HeadParallelAttention", "transpose_3": "scope_HeadParallelAttention", "dot_general_4": "scope_HeadParallelAttention_key", "reshape_5": "scope_HeadParallelAttention", "transpose_6": "scope_HeadParallelAttention", "dot_general_7": "scope_HeadParallelAttention_value", "reshape_8": "scope_HeadParallelAttention", "transpose_9": "scope_HeadParallelAttention", "attention_weights_10": "scope_HeadParallelAttention", "dot_general_11": "scope_HeadParallelAttention_bhst_bhtd__bhsd", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "scope_HeadParallelAttention", "transpose_12": "scope_HeadParallelAttention", "reshape_13": "scope_HeadParallelAttention", "dot_general_14": "scope_HeadParallelAttention_output"};
     const repeat_containers = new Set([]);
     const REPEAT_CONTAINER_COLOR = "#FA8334";
     const collapse_modules_after_depth = 1;
     const show_module_attr_names = false;
-    const node_to_module_path = {'param_1': 'MLP/dense0', 'param_2': 'MLP/dense1', 'param': '', 'dot': 'MLP/dense0', 'constant_2_clone': 'MLP', 'max_6': 'MLP/relu', 'max_7': 'MLP/relu', 'dot_1': 'MLP/dense1', 'all_reduce': 'MLP/dense1', 'output_0': ''};
+    const node_to_module_path = {'dot_general_1': 'dot_general', 'reshape_2': 'reshape', 'transpose_3': 'transpose', 'dot_general_4': 'dot_general', 'reshape_5': 'reshape', 'transpose_6': 'transpose', 'dot_general_7': 'dot_general', 'reshape_8': 'reshape', 'transpose_9': 'transpose', 'attention_weights_10': 'jit', 'dot_general_11': 'dot_general', 'transpose_12': 'transpose', 'reshape_13': 'reshape', 'dot_general_14': 'dot_general'};
     const generateImage = false;
     const generateSvg = false;
     const show_modular_view = false;
@@ -944,10 +997,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9` : `custom-tooltip_smaller_dabb42d7-8cb8-43db-befc-f9a8d3f198f9`;
+        tooltip.className = !smaller ? `custom-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825` : `custom-tooltip_smaller_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9`);
+        const container = document.getElementById(`graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -959,7 +1012,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -994,7 +1047,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+            if (isDimension) cell.className = "shape-dimension_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
         };
 
         addCell(label ? "(" : "");
@@ -1058,7 +1111,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+        row.className = "shape-connectors_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1078,7 +1131,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 shape-connector_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+            cell.className = "shape-dimension_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 shape-connector_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1135,16 +1188,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         row.insertCell();
     }
 
+    function shapeComparisonScale(tooltip, containerRect, zoomScale) {
+        const desiredScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const naturalWidth = tooltip.offsetWidth;
+        const naturalHeight = tooltip.offsetHeight;
+        const widthScale = containerRect.width * 0.72 / naturalWidth;
+        const heightScale = containerRect.height * 0.55 / naturalHeight;
+        return Math.min(desiredScale, widthScale, heightScale);
+    }
+
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
-        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const container = document.getElementById("graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
+        const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
-        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.transform = "scale(1)";
         tooltip.style.display = "block";
+        const scale = shapeComparisonScale(tooltip, containerRect, zoomScale);
+        tooltip.style.transform = `scale(${scale})`;
 
         const anchorRect = anchorElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         const unclampedLeft = anchorRect.left + anchorRect.width / 2
             - containerRect.left - tooltipRect.width / 2;
@@ -1163,14 +1226,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+        tooltip.className = "shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+        const container = document.getElementById("graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1790,7 +1853,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").html("");
+        d3.select("#graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1857,16 +1920,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").remove();
+        d3.select("#png-link-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node().parentNode;
+            const parent = d3.select("#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
-                .attr("id", "png-error-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+                .insert("div", "#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
+                .attr("id", "png-error-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                .attr("id", "png-error-message_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1904,21 +1967,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node().parentNode;
+        const parent = d3.select("#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
-            .attr("id", "png-link-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+            .insert("div", "#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
+            .attr("id", "png-link-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("id", "png-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.png`)
-            .attr("id", "png-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("download", `jaxviz_graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.png`)
+            .attr("id", "png-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1939,26 +2002,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node().parentNode;
+        const parent = d3.select("#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
-            .attr("id", "svg-link-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+            .insert("div", "#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
+            .attr("id", "svg-link-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("id", "svg-download-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9.svg`)
-            .attr("id", "svg-save-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("download", `jaxviz_graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825.svg`)
+            .attr("id", "svg-save-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        const svg = d3.select("#graph_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1972,7 +2035,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_dabb42d7-8cb8-43db-befc-f9a8d3f198f9") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -1990,7 +2053,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        .attr("id", "arrowhead_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2002,11 +2065,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        const clusters = inner.selectAll(".boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+        .attr("class", "boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2016,10 +2079,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                group.classed("error_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                group.classed("repeat-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
             }
 
             // Parse bounding box coordinates
@@ -2061,13 +2124,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                .attr("class", "collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                .attr("class", "collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2084,7 +2147,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9, .collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        clusters.selectAll(".collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825, .collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2099,19 +2162,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        const edges = inner.selectAll(".edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+        .attr("class", "edge-group_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9 implied-edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+                return "edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825 implied-edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
             }
-            return "edge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+            return "edge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2137,7 +2200,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_dabb42d7-8cb8-43db-befc-f9a8d3f198f9)");
+        .attr("marker-end", "url(#arrowhead_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2163,10 +2226,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                labelGroup.classed("has-shape-details_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                .attr("class", "edge-shape-info-badge_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2202,7 +2265,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("class", "edge-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2214,7 +2277,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+            const labelGroup = edgeGroup.select(".edge-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2255,19 +2318,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        const nodes = inner.selectAll(".node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+                let classes = "node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2295,12 +2358,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    return "operation_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    return "operation_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
                 });
             } else {
                 // Create rectangle
@@ -2310,15 +2373,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" : "operation_dabb42d7-8cb8-43db-befc-f9a8d3f198f9";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" : "operation_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        .attr("class", "node-label_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2327,7 +2390,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        .attr("class", "type-indicator_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2345,7 +2408,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        inner.selectAll(".node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2356,14 +2419,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        .attr("class", "info-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        .attr("class", "info-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2379,16 +2442,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9, .info-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            nodeGroup.selectAll(".info-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825, .info-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node();
+                const infoButton = nodeGroup.select(".info-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+        inner.selectAll(".node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2410,7 +2473,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" : "collapse-button-disabled_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("class", isExpandable ? "collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" : "collapse-button-disabled_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2419,7 +2482,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9" : "collapse-icon-disabled_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+            .attr("class", isExpandable ? "collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825" : "collapse-icon-disabled_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2439,7 +2502,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_dabb42d7-8cb8-43db-befc-f9a8d3f198f9, .collapse-icon_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                nodeGroup.selectAll(".collapse-button_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825, .collapse-icon_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2540,16 +2603,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+            clickedNodeElement.classed("highlight-node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", false);
+                clickedNodeElement.classed("highlight-node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", false);
             }, 2000);
 
-            const popup = d3.select("#popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
-            const moduleTemplate = d3.select("#module-template_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
-            const tensorOpTemplate = d3.select("#tensor-op-template_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
-            const noInfoMessage = d3.select("#no-info_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+            const popup = d3.select("#popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
+            const moduleTemplate = d3.select("#module-template_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
+            const tensorOpTemplate = d3.select("#tensor-op-template_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
+            const noInfoMessage = d3.select("#no-info_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
             
             const nodeData = adj_list[nodeName];
             
@@ -2557,14 +2620,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").text(popupTitle);
+            d3.select("#popup-title_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_dabb42d7-8cb8-43db-befc-f9a8d3f198f9");
+            const attrNameRow = d3.select("#attr-name-row_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825");
 
             if (attrName) {
-                d3.select("#attr-name-value_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").text(attrName);
+                d3.select("#attr-name-value_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2576,31 +2639,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                moduleTemplate.style("display", "block").classed("content-shown_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
                 
-                d3.select("#module-extra-repr_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node();
+                const attributesContainer = d3.select("#module-attributes_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node();
+                const parametersContainer = d3.select("#module-parameters_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                noInfoMessage.style("display", "block").classed("content-shown_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2616,19 +2679,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").node().scrollTop = 0;
+            d3.select("#popup-content_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").style("display", "none");
+            d3.select("#popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").style("display", "none");
         }
         
-        d3.select(".popup-close_dabb42d7-8cb8-43db-befc-f9a8d3f198f9").on("click", closePopup);
+        d3.select(".popup-close_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_dabb42d7-8cb8-43db-befc-f9a8d3f198f9`);
+        const popup = document.getElementById(`popup_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_dabb42d7-8cb8-43db-befc-f9a8d3f198f9');
+            const editorContainers = popup.querySelectorAll('.json-viewer_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2707,30 +2770,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                    const targetElement = inner.selectAll(".node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                        targetElement.classed("highlight-node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", false);
+                            targetElement.classed("highlight-node_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_dabb42d7-8cb8-43db-befc-f9a8d3f198f9")
+                    const targetElement = inner.selectAll(".boundary-box_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", true);
+                        targetElement.classed("highlight-cluster_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_dabb42d7-8cb8-43db-befc-f9a8d3f198f9", false);
+                            targetElement.classed("highlight-cluster_d3f7fdfe-bd42-49b9-9b16-74c61ad0c825", false);
                         }, 2000); // Match the animation duration
                     }
                 }

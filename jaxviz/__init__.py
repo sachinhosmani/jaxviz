@@ -17,10 +17,10 @@ from .render import plot_graph, validate_export_format
 
 __all__ = ["trace_model", "ExportFormat"]
 
-# The two kinds of graph trace_model can render.
-LEVEL_HIGH = "high"   # the jaxpr: the model as written (dense/relu/...), device-agnostic
-LEVEL_LOW = "low"     # the post-partitioning HLO: lower-level ops + compiler-inserted collectives
-_LEVELS = (LEVEL_HIGH, LEVEL_LOW)
+# The two program views trace_model can render.
+VIEW_GLOBAL = "global"
+VIEW_PER_DEVICE = "per_device"
+_VIEWS = (VIEW_GLOBAL, VIEW_PER_DEVICE)
 
 
 def _module_scope_context(fn):
@@ -73,7 +73,7 @@ def _active_mesh_shape():
         return None
 
 
-def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_depth=1,
+def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_depth=1,
                 height=800, width=None, export_format=None, export_path=None,
                 show_constants=False, return_html=False):
     """Trace a JAX model and render its forward pass as an interactive graph.
@@ -83,30 +83,29 @@ def trace_model(fn, *example_args, level=LEVEL_HIGH, collapse_modules_after_dept
             nesting automatically; for Flax Linen pass ``lambda x: model.apply(params, x)``;
             any callable works and is traced with ``jax.make_jaxpr``.
         *example_args: Example inputs (arrays / pytrees) with the right shapes.
-        level: Which graph to render. ``"high"`` (default) shows the jaxpr — the
-            model as written (dense/relu/...), device-agnostic, with no communication.
-            ``"low"`` compiles the program and shows the post-partitioning HLO: the
-            lower-level ops plus the collective communication operations
-            (all-reduce/all-gather/...) that the XLA compiler inserts for sharded
-            (compiler-driven / "Auto") models. Trace under a mesh so there is
-            sharding for the compiler to act on.
+        view: Which program view to render. ``"global"`` (default) shows the
+            jaxpr as written, using logical/global tensor shapes before partitioning.
+            ``"per_device"`` shows the post-partitioning HLO executed by each
+            device, including local tensor shapes and compiler-inserted collectives
+            (all-reduce/all-gather/...). Trace under a mesh so there is sharding for
+            the compiler to act on.
         collapse_modules_after_depth: Nesting depth beyond which modules start collapsed.
         height, width: Rendered graph size in pixels.
         export_format: None (inline display) or one of 'html'/'png'/'svg'.
         export_path: Optional path for HTML export.
         show_constants: Draw inline literal operands and scalar constants as
-            Constant nodes (off by default to keep the graph uncluttered). High level only.
+            Constant nodes (off by default to keep the graph uncluttered). Global view only.
         return_html: Return the embeddable graph HTML instead of displaying or exporting it.
     """
-    if level not in _LEVELS:
-        raise ValueError(f"Invalid level: {level!r}. Must be one of {_LEVELS}.")
+    if view not in _VIEWS:
+        raise ValueError(f"Invalid view: {view!r}. Must be one of {_VIEWS}.")
 
     if export_format is None and export_path is not None:
         export_format = ExportFormat.HTML
     else:
         export_format = validate_export_format(export_format)
 
-    if level == LEVEL_LOW:
+    if view == VIEW_PER_DEVICE:
         lowered = _lower_for_hlo(fn, example_args)
         blobs = build_hlo_graph(lowered, mesh_shape=_active_mesh_shape())
     else:

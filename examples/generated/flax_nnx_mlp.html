@@ -175,7 +175,7 @@ class MLP(nnx.Module):
 model = MLP(nnx.Rngs(0))
 example_input = jnp.ones((1, 8))
 
-trace_model(model, example_input, level=&#x27;high&#x27;)
+trace_model(model, example_input, view=&#x27;global&#x27;)
 </code></pre>
                 </div>
             </section>
@@ -183,124 +183,124 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_23c62d30-27aa-492d-8851-aa43d6a26414">
-    <div id="graph_23c62d30-27aa-492d-8851-aa43d6a26414"></div>
-    <div class="logo_23c62d30-27aa-492d-8851-aa43d6a26414">
+                <div class="graph-stage"><div id="graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
+    <div id="graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73"></div>
+    <div class="logo_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_23c62d30-27aa-492d-8851-aa43d6a26414" class="popup_23c62d30-27aa-492d-8851-aa43d6a26414" style="display: none;">
-        <div class="popup-header_23c62d30-27aa-492d-8851-aa43d6a26414">
-            <h3 id="popup-title_23c62d30-27aa-492d-8851-aa43d6a26414"></h3>
-            <span class="popup-close_23c62d30-27aa-492d-8851-aa43d6a26414">✕</span>
+    <div id="popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" class="popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="display: none;">
+        <div class="popup-header_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
+            <h3 id="popup-title_8ca1d6fd-75a5-41f8-82f7-79e571f50e73"></h3>
+            <span class="popup-close_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">✕</span>
         </div>
-        <div id="popup-content_23c62d30-27aa-492d-8851-aa43d6a26414" class="popup-content_23c62d30-27aa-492d-8851-aa43d6a26414">
-            <div id="common-info_23c62d30-27aa-492d-8851-aa43d6a26414">
-                <p id="attr-name-row_23c62d30-27aa-492d-8851-aa43d6a26414" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_23c62d30-27aa-492d-8851-aa43d6a26414" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" class="popup-content_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
+            <div id="common-info_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
+                <p id="attr-name-row_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_23c62d30-27aa-492d-8851-aa43d6a26414" style="display:none;">
-                <details open id="module-parameters-details_23c62d30-27aa-492d-8851-aa43d6a26414">
+            <div id="module-template_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="display:none;">
+                <details open id="module-parameters-details_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_23c62d30-27aa-492d-8851-aa43d6a26414" class="json-viewer_23c62d30-27aa-492d-8851-aa43d6a26414"></div>
+                    <div id="module-parameters_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" class="json-viewer_8ca1d6fd-75a5-41f8-82f7-79e571f50e73"></div>
                 </details>
-                <details open id="module-attributes-details_23c62d30-27aa-492d-8851-aa43d6a26414">
+                <details open id="module-attributes-details_8ca1d6fd-75a5-41f8-82f7-79e571f50e73">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_23c62d30-27aa-492d-8851-aa43d6a26414" class="json-viewer_23c62d30-27aa-492d-8851-aa43d6a26414"></div>
+                    <div id="module-attributes_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" class="json-viewer_8ca1d6fd-75a5-41f8-82f7-79e571f50e73"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_23c62d30-27aa-492d-8851-aa43d6a26414" style="display:none;">
+            <div id="tensor-op-template_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_23c62d30-27aa-492d-8851-aa43d6a26414" class="json-viewer_23c62d30-27aa-492d-8851-aa43d6a26414"></div>
+                <div id="tensor-op-parameters_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" class="json-viewer_8ca1d6fd-75a5-41f8-82f7-79e571f50e73"></div>
             </div>
-            <p id="no-info_23c62d30-27aa-492d-8851-aa43d6a26414" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        text.node-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        text.type-indicator_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        text.collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             stroke: #797979;
             fill: none;
         }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.input_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #FF9AFF; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.constant_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: rgb(235 235 235); }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.input_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #FF9AFF; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: rgb(235 235 235); }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.output_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #74e071; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.failed_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: rgb(224 15 15); }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.module_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #8BDEDB; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect.operation_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #FEBC5A; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.output_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #74e071; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.failed_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: rgb(224 15 15); }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.module_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #8BDEDB; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect.operation_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #FEBC5A; }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse.input_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #FF9AFF; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse.constant_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: rgb(235 235 235); }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse.output_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #74e071; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse.parameter_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: #B9CCF3; }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse.failed_23c62d30-27aa-492d-8851-aa43d6a26414 { fill: rgb(224 15 15); }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse.input_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #FF9AFF; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse.constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: rgb(235 235 235); }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse.output_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #74e071; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse.parameter_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: #B9CCF3; }
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse.failed_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 { fill: rgb(224 15 15); }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .edgeLabelGroup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             pointer-events: none;
         }
-        #arrowhead_23c62d30-27aa-492d-8851-aa43d6a26414 path {
+        #arrowhead_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 path {
             fill: #333333;;
         }
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 rect,
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 ellipse {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect,
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414 .type-indicator_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 .type-indicator_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414.error_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.error_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414.error_23c62d30-27aa-492d-8851-aa43d6a26414 > rect:first-of-type {
+        .boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.error_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             height: 100%;
         }
         
-        .popup_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -315,7 +315,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             flex-direction: column;
         }
 
-        .popup-header_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .popup-header_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: sticky;
             top: 0;
             background: white;
@@ -327,12 +327,12 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             z-index: 1;
         }
 
-        .popup_23c62d30-27aa-492d-8851-aa43d6a26414 h3 {
+        .popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .popup-content_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -340,87 +340,87 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             flex-grow: 1;
         }
 
-        .popup_23c62d30-27aa-492d-8851-aa43d6a26414 pre {
+        .popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .popup-close_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #popup-title_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: relative;
         }
 
-        #graph-container_23c62d30-27aa-492d-8851-aa43d6a26414 pre {
+        #graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             pointer-events: none;
         }
-        .boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414 text {
+        .boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             pointer-events: none;
         }
-        .boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414 text {
+        .boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_23c62d30-27aa-492d-8851-aa43d6a26414 text {
+        .edge-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414, .info-button_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73, .info-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover, .info-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        .collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover, .info-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414, .info-icon_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73, .info-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .collapse-button-disabled_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        .collapse-button-disabled_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .collapse-icon-disabled_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -429,23 +429,23 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
         }
 
         /* Edge hover styles */
-        .edge-group_23c62d30-27aa-492d-8851-aa43d6a26414 path {
+        .edge-group_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 path {
             pointer-events: stroke;
         }
 
-        .edge-label_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .edge-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             pointer-events: all;
         }
 
-        .edge-label_23c62d30-27aa-492d-8851-aa43d6a26414.has-shape-details_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .edge-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.has-shape-details_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_23c62d30-27aa-492d-8851-aa43d6a26414 circle {
+        .edge-shape-info-badge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_23c62d30-27aa-492d-8851-aa43d6a26414 text {
+        .edge-shape-info-badge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -487,50 +487,50 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             }
         }
 
-        .highlight-cluster_23c62d30-27aa-492d-8851-aa43d6a26414 > rect:first-of-type {
+        .highlight-cluster_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .highlight-node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        text.node-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414.constant_23c62d30-27aa-492d-8851-aa43d6a26414 .node-label_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 .node-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             font-size: 0.7rem;
         }
 
-        .popup-content_23c62d30-27aa-492d-8851-aa43d6a26414 summary {
+        .popup-content_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414.input_23c62d30-27aa-492d-8851-aa43d6a26414 rect,
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414.output_23c62d30-27aa-492d-8851-aa43d6a26414 rect,
-        .node_23c62d30-27aa-492d-8851-aa43d6a26414.constant_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.input_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect,
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.output_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect,
+        .node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #png-error-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #png-error-message_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -541,13 +541,13 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             text-align: left;
         }
 
-        #png-link-container_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #png-link-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #png-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -557,11 +557,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             margin-right: 8px;
         }
 
-        #png-download-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        #png-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #png-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -570,18 +570,18 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             border-radius: 4px;
         }
 
-        #png-save-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        #png-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #svg-link-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #svg-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -591,11 +591,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             margin-right: 8px;
         }
 
-        #svg-download-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        #svg-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        #svg-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -604,11 +604,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             border-radius: 4px;
         }
 
-        #svg-save-button_23c62d30-27aa-492d-8851-aa43d6a26414:hover {
+        #svg-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .custom-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -624,7 +624,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             display: none;
         }
 
-        .custom-tooltip_smaller_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .custom-tooltip_smaller_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -640,7 +640,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             display: none;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -654,71 +654,71 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 table {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 th {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-dimension_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-dimension_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 svg {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 line {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 polygon {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 rect {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 td.shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414 text {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 td.shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414 tr.shape-connectors_23c62d30-27aa-492d-8851-aa43d6a26414 th {
+        .shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 tr.shape-connectors_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_23c62d30-27aa-492d-8851-aa43d6a26414.implied-edge_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.implied-edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_23c62d30-27aa-492d-8851-aa43d6a26414 {
+        .logo_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_23c62d30-27aa-492d-8851-aa43d6a26414 a {
+        .logo_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -879,7 +879,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(1, 8)", "edge_data_id": 4793453248}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(8, 16)", "edge_data_id": 4793441024}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "reshape_2", "dims": "(16)", "edge_data_id": 4793450944}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_5", "dims": "(16, 4)", "edge_data_id": 4793451904}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "reshape_6", "dims": "(4)", "edge_data_id": 4793453184}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "add_3", "dims": "(1, 16)", "edge_data_id": 4793453312}], "failed": false, "node_type": "Operation"}, "reshape_2": {"edges": [{"target": "add_3", "dims": "(1, 16)", "edge_data_id": 4793453376}], "failed": false, "node_type": "Operation"}, "add_3": {"edges": [{"target": "relu_4", "dims": "(1, 16)", "edge_data_id": 4793453440}], "failed": false, "node_type": "Operation"}, "relu_4": {"edges": [{"target": "dot_general_5", "dims": "(1, 16)", "edge_data_id": 4793453504}], "failed": false, "node_type": "Operation"}, "dot_general_5": {"edges": [{"target": "add_7", "dims": "(1, 4)", "edge_data_id": 4793453568}], "failed": false, "node_type": "Operation"}, "reshape_6": {"edges": [{"target": "add_7", "dims": "(1, 4)", "edge_data_id": 4793453696}], "failed": false, "node_type": "Operation"}, "add_7": {"edges": [{"target": "output_0", "dims": "(1, 4)", "edge_data_id": 4793453760}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(1, 8)", "edge_data_id": 4666378112}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(8, 16)", "edge_data_id": 4666374080}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "reshape_2", "dims": "(16)", "edge_data_id": 4656542080}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_5", "dims": "(16, 4)", "edge_data_id": 4666376768}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "reshape_6", "dims": "(4)", "edge_data_id": 4666378048}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "add_3", "dims": "(1, 16)", "edge_data_id": 4666378176}], "failed": false, "node_type": "Operation"}, "reshape_2": {"edges": [{"target": "add_3", "dims": "(1, 16)", "edge_data_id": 4666378240}], "failed": false, "node_type": "Operation"}, "add_3": {"edges": [{"target": "relu_4", "dims": "(1, 16)", "edge_data_id": 4666378304}], "failed": false, "node_type": "Operation"}, "relu_4": {"edges": [{"target": "dot_general_5", "dims": "(1, 16)", "edge_data_id": 4666378368}], "failed": false, "node_type": "Operation"}, "dot_general_5": {"edges": [{"target": "add_7", "dims": "(1, 4)", "edge_data_id": 4666378432}], "failed": false, "node_type": "Operation"}, "reshape_6": {"edges": [{"target": "add_7", "dims": "(1, 4)", "edge_data_id": 4666378560}], "failed": false, "node_type": "Operation"}, "add_7": {"edges": [{"target": "output_0", "dims": "(1, 4)", "edge_data_id": 4666378624}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
     const module_info = {"scope_MLP_dense0": {"type": "dense0", "parameters": {}, "attributes": {}}, "scope_MLP": {"type": "MLP", "parameters": {}, "attributes": {}}, "scope_MLP_dense1": {"type": "dense1", "parameters": {}, "attributes": {}}};
     const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [1, 8], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None"}}, "reshape_2": {"positional_args": [{"_type": "tensor", "shape": [16], "dtype": "float32"}], "keyword_args": {"new_sizes": "(1, 16)", "dimensions": "None"}}, "add_3": {"positional_args": [{"_type": "tensor", "shape": [1, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [1, 16], "dtype": "float32"}], "keyword_args": {}}, "relu_4": {"positional_args": [{"_type": "tensor", "shape": [1, 16], "dtype": "float32"}], "keyword_args": {"num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_5": {"positional_args": [{"_type": "tensor", "shape": [1, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [16, 4], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None"}}, "reshape_6": {"positional_args": [{"_type": "tensor", "shape": [4], "dtype": "float32"}], "keyword_args": {"new_sizes": "(1, 4)", "dimensions": "None"}}, "add_7": {"positional_args": [{"_type": "tensor", "shape": [1, 4], "dtype": "float32"}, {"_type": "tensor", "shape": [1, 4], "dtype": "float32"}], "keyword_args": {}}};
     const parent_module_to_nodes = {"scope_MLP_dense0": ["dot_general_1", "reshape_2", "add_3"], "scope_MLP": ["dot_general_1", "reshape_2", "add_3", "relu_4", "dot_general_5", "reshape_6", "add_7"], "scope_MLP_dense1": ["dot_general_5", "reshape_6", "add_7"]};
@@ -929,10 +929,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414` : `custom-tooltip_smaller_23c62d30-27aa-492d-8851-aa43d6a26414`;
+        tooltip.className = !smaller ? `custom-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73` : `custom-tooltip_smaller_8ca1d6fd-75a5-41f8-82f7-79e571f50e73`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_23c62d30-27aa-492d-8851-aa43d6a26414`);
+        const container = document.getElementById(`graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -944,7 +944,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_23c62d30-27aa-492d-8851-aa43d6a26414`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -979,7 +979,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_23c62d30-27aa-492d-8851-aa43d6a26414";
+            if (isDimension) cell.className = "shape-dimension_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
         };
 
         addCell(label ? "(" : "");
@@ -1043,7 +1043,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_23c62d30-27aa-492d-8851-aa43d6a26414";
+        row.className = "shape-connectors_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1063,7 +1063,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_23c62d30-27aa-492d-8851-aa43d6a26414 shape-connector_23c62d30-27aa-492d-8851-aa43d6a26414";
+            cell.className = "shape-dimension_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 shape-connector_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1120,16 +1120,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         row.insertCell();
     }
 
+    function shapeComparisonScale(tooltip, containerRect, zoomScale) {
+        const desiredScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const naturalWidth = tooltip.offsetWidth;
+        const naturalHeight = tooltip.offsetHeight;
+        const widthScale = containerRect.width * 0.72 / naturalWidth;
+        const heightScale = containerRect.height * 0.55 / naturalHeight;
+        return Math.min(desiredScale, widthScale, heightScale);
+    }
+
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_23c62d30-27aa-492d-8851-aa43d6a26414");
-        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const container = document.getElementById("graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
+        const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
-        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.transform = "scale(1)";
         tooltip.style.display = "block";
+        const scale = shapeComparisonScale(tooltip, containerRect, zoomScale);
+        tooltip.style.transform = `scale(${scale})`;
 
         const anchorRect = anchorElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         const unclampedLeft = anchorRect.left + anchorRect.width / 2
             - containerRect.left - tooltipRect.width / 2;
@@ -1148,14 +1158,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414";
+        tooltip.className = "shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_23c62d30-27aa-492d-8851-aa43d6a26414");
+        const container = document.getElementById("graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1775,7 +1785,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_23c62d30-27aa-492d-8851-aa43d6a26414").html("");
+        d3.select("#graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1842,16 +1852,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_23c62d30-27aa-492d-8851-aa43d6a26414").remove();
+        d3.select("#png-link-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414").node().parentNode;
+            const parent = d3.select("#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414")
-                .attr("id", "png-error-container_23c62d30-27aa-492d-8851-aa43d6a26414");
+                .insert("div", "#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
+                .attr("id", "png-error-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_23c62d30-27aa-492d-8851-aa43d6a26414")
+                .attr("id", "png-error-message_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1889,21 +1899,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414").node().parentNode;
+        const parent = d3.select("#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414")
-            .attr("id", "png-link-container_23c62d30-27aa-492d-8851-aa43d6a26414");
+            .insert("div", "#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
+            .attr("id", "png-link-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("id", "png-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_23c62d30-27aa-492d-8851-aa43d6a26414.png`)
-            .attr("id", "png-save-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("download", `jaxviz_graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.png`)
+            .attr("id", "png-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1924,26 +1934,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414").node().parentNode;
+        const parent = d3.select("#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414")
-            .attr("id", "svg-link-container_23c62d30-27aa-492d-8851-aa43d6a26414");
+            .insert("div", "#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
+            .attr("id", "svg-link-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("id", "svg-download-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_23c62d30-27aa-492d-8851-aa43d6a26414.svg`)
-            .attr("id", "svg-save-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("download", `jaxviz_graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73.svg`)
+            .attr("id", "svg-save-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_23c62d30-27aa-492d-8851-aa43d6a26414")
+        const svg = d3.select("#graph_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1957,7 +1967,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_23c62d30-27aa-492d-8851-aa43d6a26414") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_8ca1d6fd-75a5-41f8-82f7-79e571f50e73") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -1975,7 +1985,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_23c62d30-27aa-492d-8851-aa43d6a26414")
+        .attr("id", "arrowhead_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -1987,11 +1997,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414")
+        const clusters = inner.selectAll(".boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414");
+        .attr("class", "boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2001,10 +2011,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                group.classed("error_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                group.classed("repeat-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
             }
 
             // Parse bounding box coordinates
@@ -2046,13 +2056,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+                .attr("class", "collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414")
+                .attr("class", "collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2069,7 +2079,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414, .collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414")
+        clusters.selectAll(".collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73, .collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2084,19 +2094,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_23c62d30-27aa-492d-8851-aa43d6a26414")
+        const edges = inner.selectAll(".edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_23c62d30-27aa-492d-8851-aa43d6a26414");
+        .attr("class", "edge-group_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_23c62d30-27aa-492d-8851-aa43d6a26414 implied-edge_23c62d30-27aa-492d-8851-aa43d6a26414";
+                return "edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73 implied-edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
             }
-            return "edge_23c62d30-27aa-492d-8851-aa43d6a26414";
+            return "edge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2122,7 +2132,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_23c62d30-27aa-492d-8851-aa43d6a26414)");
+        .attr("marker-end", "url(#arrowhead_8ca1d6fd-75a5-41f8-82f7-79e571f50e73)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2148,10 +2158,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                labelGroup.classed("has-shape-details_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_23c62d30-27aa-492d-8851-aa43d6a26414")
+                .attr("class", "edge-shape-info-badge_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2187,7 +2197,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("class", "edge-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2199,7 +2209,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_23c62d30-27aa-492d-8851-aa43d6a26414");
+            const labelGroup = edgeGroup.select(".edge-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2240,19 +2250,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_23c62d30-27aa-492d-8851-aa43d6a26414")
+        const nodes = inner.selectAll(".node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_23c62d30-27aa-492d-8851-aa43d6a26414";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_23c62d30-27aa-492d-8851-aa43d6a26414";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_23c62d30-27aa-492d-8851-aa43d6a26414";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_23c62d30-27aa-492d-8851-aa43d6a26414";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_23c62d30-27aa-492d-8851-aa43d6a26414";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_23c62d30-27aa-492d-8851-aa43d6a26414";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_23c62d30-27aa-492d-8851-aa43d6a26414";
+                let classes = "node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2280,12 +2290,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    return "operation_23c62d30-27aa-492d-8851-aa43d6a26414";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    return "operation_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
                 });
             } else {
                 // Create rectangle
@@ -2295,15 +2305,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_23c62d30-27aa-492d-8851-aa43d6a26414";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_23c62d30-27aa-492d-8851-aa43d6a26414" : "operation_23c62d30-27aa-492d-8851-aa43d6a26414";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" : "operation_8ca1d6fd-75a5-41f8-82f7-79e571f50e73";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_23c62d30-27aa-492d-8851-aa43d6a26414")
+        .attr("class", "node-label_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2312,7 +2322,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_23c62d30-27aa-492d-8851-aa43d6a26414")
+        .attr("class", "type-indicator_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2330,7 +2340,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_23c62d30-27aa-492d-8851-aa43d6a26414")
+        inner.selectAll(".node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2341,14 +2351,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_23c62d30-27aa-492d-8851-aa43d6a26414")
+        .attr("class", "info-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_23c62d30-27aa-492d-8851-aa43d6a26414")
+        .attr("class", "info-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2364,16 +2374,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_23c62d30-27aa-492d-8851-aa43d6a26414, .info-icon_23c62d30-27aa-492d-8851-aa43d6a26414")
+            nodeGroup.selectAll(".info-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73, .info-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_23c62d30-27aa-492d-8851-aa43d6a26414").node();
+                const infoButton = nodeGroup.select(".info-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_23c62d30-27aa-492d-8851-aa43d6a26414")
+        inner.selectAll(".node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2395,7 +2405,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414" : "collapse-button-disabled_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("class", isExpandable ? "collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" : "collapse-button-disabled_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2404,7 +2414,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414" : "collapse-icon-disabled_23c62d30-27aa-492d-8851-aa43d6a26414")
+            .attr("class", isExpandable ? "collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73" : "collapse-icon-disabled_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2424,7 +2434,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_23c62d30-27aa-492d-8851-aa43d6a26414, .collapse-icon_23c62d30-27aa-492d-8851-aa43d6a26414")
+                nodeGroup.selectAll(".collapse-button_8ca1d6fd-75a5-41f8-82f7-79e571f50e73, .collapse-icon_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2525,16 +2535,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+            clickedNodeElement.classed("highlight-node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_23c62d30-27aa-492d-8851-aa43d6a26414", false);
+                clickedNodeElement.classed("highlight-node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", false);
             }, 2000);
 
-            const popup = d3.select("#popup_23c62d30-27aa-492d-8851-aa43d6a26414");
-            const moduleTemplate = d3.select("#module-template_23c62d30-27aa-492d-8851-aa43d6a26414");
-            const tensorOpTemplate = d3.select("#tensor-op-template_23c62d30-27aa-492d-8851-aa43d6a26414");
-            const noInfoMessage = d3.select("#no-info_23c62d30-27aa-492d-8851-aa43d6a26414");
+            const popup = d3.select("#popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
+            const moduleTemplate = d3.select("#module-template_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
+            const tensorOpTemplate = d3.select("#tensor-op-template_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
+            const noInfoMessage = d3.select("#no-info_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
             
             const nodeData = adj_list[nodeName];
             
@@ -2542,14 +2552,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_23c62d30-27aa-492d-8851-aa43d6a26414").text(popupTitle);
+            d3.select("#popup-title_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_23c62d30-27aa-492d-8851-aa43d6a26414");
+            const attrNameRow = d3.select("#attr-name-row_8ca1d6fd-75a5-41f8-82f7-79e571f50e73");
 
             if (attrName) {
-                d3.select("#attr-name-value_23c62d30-27aa-492d-8851-aa43d6a26414").text(attrName);
+                d3.select("#attr-name-value_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2561,31 +2571,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                moduleTemplate.style("display", "block").classed("content-shown_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
                 
-                d3.select("#module-extra-repr_23c62d30-27aa-492d-8851-aa43d6a26414").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_23c62d30-27aa-492d-8851-aa43d6a26414").node();
+                const attributesContainer = d3.select("#module-attributes_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_23c62d30-27aa-492d-8851-aa43d6a26414").node();
+                const parametersContainer = d3.select("#module-parameters_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_23c62d30-27aa-492d-8851-aa43d6a26414", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_23c62d30-27aa-492d-8851-aa43d6a26414").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                noInfoMessage.style("display", "block").classed("content-shown_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_23c62d30-27aa-492d-8851-aa43d6a26414").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2601,19 +2611,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_23c62d30-27aa-492d-8851-aa43d6a26414").node().scrollTop = 0;
+            d3.select("#popup-content_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_23c62d30-27aa-492d-8851-aa43d6a26414").style("display", "none");
+            d3.select("#popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").style("display", "none");
         }
         
-        d3.select(".popup-close_23c62d30-27aa-492d-8851-aa43d6a26414").on("click", closePopup);
+        d3.select(".popup-close_8ca1d6fd-75a5-41f8-82f7-79e571f50e73").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_23c62d30-27aa-492d-8851-aa43d6a26414`);
+        const popup = document.getElementById(`popup_8ca1d6fd-75a5-41f8-82f7-79e571f50e73`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_23c62d30-27aa-492d-8851-aa43d6a26414');
+            const editorContainers = popup.querySelectorAll('.json-viewer_8ca1d6fd-75a5-41f8-82f7-79e571f50e73');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2692,30 +2702,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_23c62d30-27aa-492d-8851-aa43d6a26414")
+                    const targetElement = inner.selectAll(".node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                        targetElement.classed("highlight-node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_23c62d30-27aa-492d-8851-aa43d6a26414", false);
+                            targetElement.classed("highlight-node_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_23c62d30-27aa-492d-8851-aa43d6a26414")
+                    const targetElement = inner.selectAll(".boundary-box_8ca1d6fd-75a5-41f8-82f7-79e571f50e73")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_23c62d30-27aa-492d-8851-aa43d6a26414", true);
+                        targetElement.classed("highlight-cluster_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_23c62d30-27aa-492d-8851-aa43d6a26414", false);
+                            targetElement.classed("highlight-cluster_8ca1d6fd-75a5-41f8-82f7-79e571f50e73", false);
                         }, 2000); // Match the animation duration
                     }
                 }

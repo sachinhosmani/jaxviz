@@ -178,7 +178,7 @@ class MLP(eqx.Module):
 model = MLP(jax.random.PRNGKey(0))
 example_input = jnp.ones((8,))
 
-trace_model(model, example_input, level=&#x27;high&#x27;)
+trace_model(model, example_input, view=&#x27;global&#x27;)
 </code></pre>
                 </div>
             </section>
@@ -186,124 +186,124 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_4ad89263-cb75-4545-b87a-f6047176e94e">
-    <div id="graph_4ad89263-cb75-4545-b87a-f6047176e94e"></div>
-    <div class="logo_4ad89263-cb75-4545-b87a-f6047176e94e">
+                <div class="graph-stage"><div id="graph-container_417846f5-47e2-4024-813d-1606ff4c80c4">
+    <div id="graph_417846f5-47e2-4024-813d-1606ff4c80c4"></div>
+    <div class="logo_417846f5-47e2-4024-813d-1606ff4c80c4">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_4ad89263-cb75-4545-b87a-f6047176e94e" class="popup_4ad89263-cb75-4545-b87a-f6047176e94e" style="display: none;">
-        <div class="popup-header_4ad89263-cb75-4545-b87a-f6047176e94e">
-            <h3 id="popup-title_4ad89263-cb75-4545-b87a-f6047176e94e"></h3>
-            <span class="popup-close_4ad89263-cb75-4545-b87a-f6047176e94e">✕</span>
+    <div id="popup_417846f5-47e2-4024-813d-1606ff4c80c4" class="popup_417846f5-47e2-4024-813d-1606ff4c80c4" style="display: none;">
+        <div class="popup-header_417846f5-47e2-4024-813d-1606ff4c80c4">
+            <h3 id="popup-title_417846f5-47e2-4024-813d-1606ff4c80c4"></h3>
+            <span class="popup-close_417846f5-47e2-4024-813d-1606ff4c80c4">✕</span>
         </div>
-        <div id="popup-content_4ad89263-cb75-4545-b87a-f6047176e94e" class="popup-content_4ad89263-cb75-4545-b87a-f6047176e94e">
-            <div id="common-info_4ad89263-cb75-4545-b87a-f6047176e94e">
-                <p id="attr-name-row_4ad89263-cb75-4545-b87a-f6047176e94e" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_4ad89263-cb75-4545-b87a-f6047176e94e" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_417846f5-47e2-4024-813d-1606ff4c80c4" class="popup-content_417846f5-47e2-4024-813d-1606ff4c80c4">
+            <div id="common-info_417846f5-47e2-4024-813d-1606ff4c80c4">
+                <p id="attr-name-row_417846f5-47e2-4024-813d-1606ff4c80c4" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_417846f5-47e2-4024-813d-1606ff4c80c4" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_4ad89263-cb75-4545-b87a-f6047176e94e" style="display:none;">
-                <details open id="module-parameters-details_4ad89263-cb75-4545-b87a-f6047176e94e">
+            <div id="module-template_417846f5-47e2-4024-813d-1606ff4c80c4" style="display:none;">
+                <details open id="module-parameters-details_417846f5-47e2-4024-813d-1606ff4c80c4">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_4ad89263-cb75-4545-b87a-f6047176e94e" class="json-viewer_4ad89263-cb75-4545-b87a-f6047176e94e"></div>
+                    <div id="module-parameters_417846f5-47e2-4024-813d-1606ff4c80c4" class="json-viewer_417846f5-47e2-4024-813d-1606ff4c80c4"></div>
                 </details>
-                <details open id="module-attributes-details_4ad89263-cb75-4545-b87a-f6047176e94e">
+                <details open id="module-attributes-details_417846f5-47e2-4024-813d-1606ff4c80c4">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_4ad89263-cb75-4545-b87a-f6047176e94e" class="json-viewer_4ad89263-cb75-4545-b87a-f6047176e94e"></div>
+                    <div id="module-attributes_417846f5-47e2-4024-813d-1606ff4c80c4" class="json-viewer_417846f5-47e2-4024-813d-1606ff4c80c4"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_4ad89263-cb75-4545-b87a-f6047176e94e" style="display:none;">
+            <div id="tensor-op-template_417846f5-47e2-4024-813d-1606ff4c80c4" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_4ad89263-cb75-4545-b87a-f6047176e94e" class="json-viewer_4ad89263-cb75-4545-b87a-f6047176e94e"></div>
+                <div id="tensor-op-parameters_417846f5-47e2-4024-813d-1606ff4c80c4" class="json-viewer_417846f5-47e2-4024-813d-1606ff4c80c4"></div>
             </div>
-            <p id="no-info_4ad89263-cb75-4545-b87a-f6047176e94e" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_417846f5-47e2-4024-813d-1606ff4c80c4" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_4ad89263-cb75-4545-b87a-f6047176e94e {
+        text.node-label_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_4ad89263-cb75-4545-b87a-f6047176e94e {
+        text.type-indicator_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e {
+        text.collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .edge_417846f5-47e2-4024-813d-1606ff4c80c4 {
             stroke: #797979;
             fill: none;
         }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.input_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #FF9AFF; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.constant_4ad89263-cb75-4545-b87a-f6047176e94e { fill: rgb(235 235 235); }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.input_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #FF9AFF; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.constant_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: rgb(235 235 235); }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.output_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #74e071; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.failed_4ad89263-cb75-4545-b87a-f6047176e94e { fill: rgb(224 15 15); }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.module_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #8BDEDB; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect.operation_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #FEBC5A; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.output_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #74e071; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.failed_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: rgb(224 15 15); }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.module_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #8BDEDB; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect.operation_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #FEBC5A; }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse.input_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #FF9AFF; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse.constant_4ad89263-cb75-4545-b87a-f6047176e94e { fill: rgb(235 235 235); }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse.output_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #74e071; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse.parameter_4ad89263-cb75-4545-b87a-f6047176e94e { fill: #B9CCF3; }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse.failed_4ad89263-cb75-4545-b87a-f6047176e94e { fill: rgb(224 15 15); }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse.input_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #FF9AFF; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse.constant_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: rgb(235 235 235); }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse.output_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #74e071; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse.parameter_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: #B9CCF3; }
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse.failed_417846f5-47e2-4024-813d-1606ff4c80c4 { fill: rgb(224 15 15); }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .edgeLabelGroup_417846f5-47e2-4024-813d-1606ff4c80c4 {
             pointer-events: none;
         }
-        #arrowhead_4ad89263-cb75-4545-b87a-f6047176e94e path {
+        #arrowhead_417846f5-47e2-4024-813d-1606ff4c80c4 path {
             fill: #333333;;
         }
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e rect,
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e ellipse {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 rect,
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e .type-indicator_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4 .type-indicator_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e.error_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4.error_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e.error_4ad89263-cb75-4545-b87a-f6047176e94e > rect:first-of-type {
+        .boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4.error_417846f5-47e2-4024-813d-1606ff4c80c4 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #graph-container_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #graph_417846f5-47e2-4024-813d-1606ff4c80c4 {
             height: 100%;
         }
         
-        .popup_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .popup_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -318,7 +318,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             flex-direction: column;
         }
 
-        .popup-header_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .popup-header_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: sticky;
             top: 0;
             background: white;
@@ -330,12 +330,12 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             z-index: 1;
         }
 
-        .popup_4ad89263-cb75-4545-b87a-f6047176e94e h3 {
+        .popup_417846f5-47e2-4024-813d-1606ff4c80c4 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .popup-content_417846f5-47e2-4024-813d-1606ff4c80c4 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -343,87 +343,87 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             flex-grow: 1;
         }
 
-        .popup_4ad89263-cb75-4545-b87a-f6047176e94e pre {
+        .popup_417846f5-47e2-4024-813d-1606ff4c80c4 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .popup-close_417846f5-47e2-4024-813d-1606ff4c80c4 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #popup-title_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #graph-container_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: relative;
         }
 
-        #graph-container_4ad89263-cb75-4545-b87a-f6047176e94e pre {
+        #graph-container_417846f5-47e2-4024-813d-1606ff4c80c4 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             pointer-events: none;
         }
-        .boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e text {
+        .boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             pointer-events: none;
         }
-        .boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e text {
+        .boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_4ad89263-cb75-4545-b87a-f6047176e94e text {
+        .edge-label_417846f5-47e2-4024-813d-1606ff4c80c4 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e, .info-button_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4, .info-button_417846f5-47e2-4024-813d-1606ff4c80c4 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover, .info-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        .collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover, .info-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e, .info-icon_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4, .info-icon_417846f5-47e2-4024-813d-1606ff4c80c4 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .collapse-button-disabled_417846f5-47e2-4024-813d-1606ff4c80c4 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        .collapse-button-disabled_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .collapse-icon-disabled_417846f5-47e2-4024-813d-1606ff4c80c4 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -432,23 +432,23 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
         }
 
         /* Edge hover styles */
-        .edge-group_4ad89263-cb75-4545-b87a-f6047176e94e path {
+        .edge-group_417846f5-47e2-4024-813d-1606ff4c80c4 path {
             pointer-events: stroke;
         }
 
-        .edge-label_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .edge-label_417846f5-47e2-4024-813d-1606ff4c80c4 {
             pointer-events: all;
         }
 
-        .edge-label_4ad89263-cb75-4545-b87a-f6047176e94e.has-shape-details_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .edge-label_417846f5-47e2-4024-813d-1606ff4c80c4.has-shape-details_417846f5-47e2-4024-813d-1606ff4c80c4 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_4ad89263-cb75-4545-b87a-f6047176e94e circle {
+        .edge-shape-info-badge_417846f5-47e2-4024-813d-1606ff4c80c4 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_4ad89263-cb75-4545-b87a-f6047176e94e text {
+        .edge-shape-info-badge_417846f5-47e2-4024-813d-1606ff4c80c4 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -490,50 +490,50 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             }
         }
 
-        .highlight-cluster_4ad89263-cb75-4545-b87a-f6047176e94e > rect:first-of-type {
+        .highlight-cluster_417846f5-47e2-4024-813d-1606ff4c80c4 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .highlight-node_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_4ad89263-cb75-4545-b87a-f6047176e94e {
+        text.node-label_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e.constant_4ad89263-cb75-4545-b87a-f6047176e94e .node-label_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4.constant_417846f5-47e2-4024-813d-1606ff4c80c4 .node-label_417846f5-47e2-4024-813d-1606ff4c80c4 {
             font-size: 0.7rem;
         }
 
-        .popup-content_4ad89263-cb75-4545-b87a-f6047176e94e summary {
+        .popup-content_417846f5-47e2-4024-813d-1606ff4c80c4 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e.input_4ad89263-cb75-4545-b87a-f6047176e94e rect,
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e.output_4ad89263-cb75-4545-b87a-f6047176e94e rect,
-        .node_4ad89263-cb75-4545-b87a-f6047176e94e.constant_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4.input_417846f5-47e2-4024-813d-1606ff4c80c4 rect,
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4.output_417846f5-47e2-4024-813d-1606ff4c80c4 rect,
+        .node_417846f5-47e2-4024-813d-1606ff4c80c4.constant_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #png-error-container_417846f5-47e2-4024-813d-1606ff4c80c4 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #png-error-message_417846f5-47e2-4024-813d-1606ff4c80c4 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -544,13 +544,13 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             text-align: left;
         }
 
-        #png-link-container_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #png-link-container_417846f5-47e2-4024-813d-1606ff4c80c4 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #png-download-button_417846f5-47e2-4024-813d-1606ff4c80c4 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -560,11 +560,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             margin-right: 8px;
         }
 
-        #png-download-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        #png-download-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #png-save-button_417846f5-47e2-4024-813d-1606ff4c80c4 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -573,18 +573,18 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             border-radius: 4px;
         }
 
-        #png-save-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        #png-save-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #svg-link-container_417846f5-47e2-4024-813d-1606ff4c80c4 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #svg-download-button_417846f5-47e2-4024-813d-1606ff4c80c4 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -594,11 +594,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             margin-right: 8px;
         }
 
-        #svg-download-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        #svg-download-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_4ad89263-cb75-4545-b87a-f6047176e94e {
+        #svg-save-button_417846f5-47e2-4024-813d-1606ff4c80c4 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -607,11 +607,11 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             border-radius: 4px;
         }
 
-        #svg-save-button_4ad89263-cb75-4545-b87a-f6047176e94e:hover {
+        #svg-save-button_417846f5-47e2-4024-813d-1606ff4c80c4:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .custom-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -627,7 +627,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             display: none;
         }
 
-        .custom-tooltip_smaller_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .custom-tooltip_smaller_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -643,7 +643,7 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             display: none;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -657,71 +657,71 @@ trace_model(model, example_input, level=&#x27;high&#x27;)
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e table {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e th {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-dimension_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-dimension_417846f5-47e2-4024-813d-1606ff4c80c4 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e svg {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e line {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e polygon {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e rect {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e td.shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e text {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 td.shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e tr.shape-connectors_4ad89263-cb75-4545-b87a-f6047176e94e th {
+        .shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4 tr.shape-connectors_417846f5-47e2-4024-813d-1606ff4c80c4 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_4ad89263-cb75-4545-b87a-f6047176e94e.implied-edge_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .edge_417846f5-47e2-4024-813d-1606ff4c80c4.implied-edge_417846f5-47e2-4024-813d-1606ff4c80c4 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_4ad89263-cb75-4545-b87a-f6047176e94e {
+        .logo_417846f5-47e2-4024-813d-1606ff4c80c4 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_4ad89263-cb75-4545-b87a-f6047176e94e a {
+        .logo_417846f5-47e2-4024-813d-1606ff4c80c4 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -882,7 +882,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(8)", "edge_data_id": 4753526272}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 8)", "edge_data_id": 4753525760}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "add_2", "dims": "(16)", "edge_data_id": 4753526080}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_4", "dims": "(4, 16)", "edge_data_id": 4753526144}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "add_5", "dims": "(4)", "edge_data_id": 4753526208}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "add_2", "dims": "(16)", "edge_data_id": 4753526336}], "failed": false, "node_type": "Operation"}, "add_2": {"edges": [{"target": "relu_3", "dims": "(16)", "edge_data_id": 4753526400}], "failed": false, "node_type": "Operation"}, "relu_3": {"edges": [{"target": "dot_general_4", "dims": "(16)", "edge_data_id": 4753526464}], "failed": false, "node_type": "Operation"}, "dot_general_4": {"edges": [{"target": "add_5", "dims": "(4)", "edge_data_id": 4753526528}], "failed": false, "node_type": "Operation"}, "add_5": {"edges": [{"target": "output_0", "dims": "(4)", "edge_data_id": 4753526592}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(8)", "edge_data_id": 4643212352}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 8)", "edge_data_id": 4643211840}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "add_2", "dims": "(16)", "edge_data_id": 4643212160}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_4", "dims": "(4, 16)", "edge_data_id": 4643212224}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "add_5", "dims": "(4)", "edge_data_id": 4643212288}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "add_2", "dims": "(16)", "edge_data_id": 4643212416}], "failed": false, "node_type": "Operation"}, "add_2": {"edges": [{"target": "relu_3", "dims": "(16)", "edge_data_id": 4643212480}], "failed": false, "node_type": "Operation"}, "relu_3": {"edges": [{"target": "dot_general_4", "dims": "(16)", "edge_data_id": 4643212544}], "failed": false, "node_type": "Operation"}, "dot_general_4": {"edges": [{"target": "add_5", "dims": "(4)", "edge_data_id": 4643212608}], "failed": false, "node_type": "Operation"}, "add_5": {"edges": [{"target": "output_0", "dims": "(4)", "edge_data_id": 4643212672}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
     const module_info = {"scope_eqx_nn_Linear": {"type": "eqx.nn.Linear", "parameters": {}, "attributes": {}}};
     const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [16, 8], "dtype": "float32"}, {"_type": "tensor", "shape": [8], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "float32"}}, "add_2": {"positional_args": [{"_type": "tensor", "shape": [16], "dtype": "float32"}, {"_type": "tensor", "shape": [16], "dtype": "float32"}], "keyword_args": {}}, "relu_3": {"positional_args": [{"_type": "tensor", "shape": [16], "dtype": "float32"}], "keyword_args": {"num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_4": {"positional_args": [{"_type": "tensor", "shape": [4, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "float32"}}, "add_5": {"positional_args": [{"_type": "tensor", "shape": [4], "dtype": "float32"}, {"_type": "tensor", "shape": [4], "dtype": "float32"}], "keyword_args": {}}};
     const parent_module_to_nodes = {"scope_eqx_nn_Linear": ["dot_general_1", "add_2", "dot_general_4", "add_5"]};
@@ -932,10 +932,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e` : `custom-tooltip_smaller_4ad89263-cb75-4545-b87a-f6047176e94e`;
+        tooltip.className = !smaller ? `custom-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4` : `custom-tooltip_smaller_417846f5-47e2-4024-813d-1606ff4c80c4`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_4ad89263-cb75-4545-b87a-f6047176e94e`);
+        const container = document.getElementById(`graph-container_417846f5-47e2-4024-813d-1606ff4c80c4`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -947,7 +947,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_4ad89263-cb75-4545-b87a-f6047176e94e`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_417846f5-47e2-4024-813d-1606ff4c80c4`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -982,7 +982,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_4ad89263-cb75-4545-b87a-f6047176e94e";
+            if (isDimension) cell.className = "shape-dimension_417846f5-47e2-4024-813d-1606ff4c80c4";
         };
 
         addCell(label ? "(" : "");
@@ -1046,7 +1046,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_4ad89263-cb75-4545-b87a-f6047176e94e";
+        row.className = "shape-connectors_417846f5-47e2-4024-813d-1606ff4c80c4";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1066,7 +1066,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_4ad89263-cb75-4545-b87a-f6047176e94e shape-connector_4ad89263-cb75-4545-b87a-f6047176e94e";
+            cell.className = "shape-dimension_417846f5-47e2-4024-813d-1606ff4c80c4 shape-connector_417846f5-47e2-4024-813d-1606ff4c80c4";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1123,16 +1123,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         row.insertCell();
     }
 
+    function shapeComparisonScale(tooltip, containerRect, zoomScale) {
+        const desiredScale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const naturalWidth = tooltip.offsetWidth;
+        const naturalHeight = tooltip.offsetHeight;
+        const widthScale = containerRect.width * 0.72 / naturalWidth;
+        const heightScale = containerRect.height * 0.55 / naturalHeight;
+        return Math.min(desiredScale, widthScale, heightScale);
+    }
+
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_4ad89263-cb75-4545-b87a-f6047176e94e");
-        const scale = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
+        const container = document.getElementById("graph-container_417846f5-47e2-4024-813d-1606ff4c80c4");
+        const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
-        tooltip.style.transform = `scale(${scale})`;
+        tooltip.style.transform = "scale(1)";
         tooltip.style.display = "block";
+        const scale = shapeComparisonScale(tooltip, containerRect, zoomScale);
+        tooltip.style.transform = `scale(${scale})`;
 
         const anchorRect = anchorElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
         const tooltipRect = tooltip.getBoundingClientRect();
         const unclampedLeft = anchorRect.left + anchorRect.width / 2
             - containerRect.left - tooltipRect.width / 2;
@@ -1151,14 +1161,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e";
+        tooltip.className = "shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_4ad89263-cb75-4545-b87a-f6047176e94e");
+        const container = document.getElementById("graph-container_417846f5-47e2-4024-813d-1606ff4c80c4");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1778,7 +1788,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_4ad89263-cb75-4545-b87a-f6047176e94e").html("");
+        d3.select("#graph_417846f5-47e2-4024-813d-1606ff4c80c4").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1845,16 +1855,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_4ad89263-cb75-4545-b87a-f6047176e94e").remove();
+        d3.select("#png-link-container_417846f5-47e2-4024-813d-1606ff4c80c4").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e").node().parentNode;
+            const parent = d3.select("#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e")
-                .attr("id", "png-error-container_4ad89263-cb75-4545-b87a-f6047176e94e");
+                .insert("div", "#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4")
+                .attr("id", "png-error-container_417846f5-47e2-4024-813d-1606ff4c80c4");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_4ad89263-cb75-4545-b87a-f6047176e94e")
+                .attr("id", "png-error-message_417846f5-47e2-4024-813d-1606ff4c80c4")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1892,21 +1902,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e").node().parentNode;
+        const parent = d3.select("#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e")
-            .attr("id", "png-link-container_4ad89263-cb75-4545-b87a-f6047176e94e");
+            .insert("div", "#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4")
+            .attr("id", "png-link-container_417846f5-47e2-4024-813d-1606ff4c80c4");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("id", "png-download-button_417846f5-47e2-4024-813d-1606ff4c80c4")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_4ad89263-cb75-4545-b87a-f6047176e94e.png`)
-            .attr("id", "png-save-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("download", `jaxviz_graph_417846f5-47e2-4024-813d-1606ff4c80c4.png`)
+            .attr("id", "png-save-button_417846f5-47e2-4024-813d-1606ff4c80c4")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1927,26 +1937,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e").node().parentNode;
+        const parent = d3.select("#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e")
-            .attr("id", "svg-link-container_4ad89263-cb75-4545-b87a-f6047176e94e");
+            .insert("div", "#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4")
+            .attr("id", "svg-link-container_417846f5-47e2-4024-813d-1606ff4c80c4");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("id", "svg-download-button_417846f5-47e2-4024-813d-1606ff4c80c4")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_4ad89263-cb75-4545-b87a-f6047176e94e.svg`)
-            .attr("id", "svg-save-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("download", `jaxviz_graph_417846f5-47e2-4024-813d-1606ff4c80c4.svg`)
+            .attr("id", "svg-save-button_417846f5-47e2-4024-813d-1606ff4c80c4")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_4ad89263-cb75-4545-b87a-f6047176e94e")
+        const svg = d3.select("#graph_417846f5-47e2-4024-813d-1606ff4c80c4")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1960,7 +1970,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_4ad89263-cb75-4545-b87a-f6047176e94e") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_417846f5-47e2-4024-813d-1606ff4c80c4") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -1978,7 +1988,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_4ad89263-cb75-4545-b87a-f6047176e94e")
+        .attr("id", "arrowhead_417846f5-47e2-4024-813d-1606ff4c80c4")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -1990,11 +2000,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e")
+        const clusters = inner.selectAll(".boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e");
+        .attr("class", "boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2004,10 +2014,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                group.classed("error_417846f5-47e2-4024-813d-1606ff4c80c4", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                group.classed("repeat-container_417846f5-47e2-4024-813d-1606ff4c80c4", true);
             }
 
             // Parse bounding box coordinates
@@ -2049,13 +2059,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+                .attr("class", "collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e")
+                .attr("class", "collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2072,7 +2082,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e, .collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e")
+        clusters.selectAll(".collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4, .collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2087,19 +2097,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_4ad89263-cb75-4545-b87a-f6047176e94e")
+        const edges = inner.selectAll(".edge_417846f5-47e2-4024-813d-1606ff4c80c4")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_4ad89263-cb75-4545-b87a-f6047176e94e");
+        .attr("class", "edge-group_417846f5-47e2-4024-813d-1606ff4c80c4");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_4ad89263-cb75-4545-b87a-f6047176e94e implied-edge_4ad89263-cb75-4545-b87a-f6047176e94e";
+                return "edge_417846f5-47e2-4024-813d-1606ff4c80c4 implied-edge_417846f5-47e2-4024-813d-1606ff4c80c4";
             }
-            return "edge_4ad89263-cb75-4545-b87a-f6047176e94e";
+            return "edge_417846f5-47e2-4024-813d-1606ff4c80c4";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2125,7 +2135,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_4ad89263-cb75-4545-b87a-f6047176e94e)");
+        .attr("marker-end", "url(#arrowhead_417846f5-47e2-4024-813d-1606ff4c80c4)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2151,10 +2161,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                labelGroup.classed("has-shape-details_417846f5-47e2-4024-813d-1606ff4c80c4", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_4ad89263-cb75-4545-b87a-f6047176e94e")
+                .attr("class", "edge-shape-info-badge_417846f5-47e2-4024-813d-1606ff4c80c4")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2190,7 +2200,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("class", "edge-label_417846f5-47e2-4024-813d-1606ff4c80c4")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2202,7 +2212,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_4ad89263-cb75-4545-b87a-f6047176e94e");
+            const labelGroup = edgeGroup.select(".edge-label_417846f5-47e2-4024-813d-1606ff4c80c4");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2243,19 +2253,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_4ad89263-cb75-4545-b87a-f6047176e94e")
+        const nodes = inner.selectAll(".node_417846f5-47e2-4024-813d-1606ff4c80c4")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_4ad89263-cb75-4545-b87a-f6047176e94e";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_4ad89263-cb75-4545-b87a-f6047176e94e";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_4ad89263-cb75-4545-b87a-f6047176e94e";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_4ad89263-cb75-4545-b87a-f6047176e94e";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_4ad89263-cb75-4545-b87a-f6047176e94e";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_4ad89263-cb75-4545-b87a-f6047176e94e";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_4ad89263-cb75-4545-b87a-f6047176e94e";
+                let classes = "node_417846f5-47e2-4024-813d-1606ff4c80c4";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_417846f5-47e2-4024-813d-1606ff4c80c4";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_417846f5-47e2-4024-813d-1606ff4c80c4";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_417846f5-47e2-4024-813d-1606ff4c80c4";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_417846f5-47e2-4024-813d-1606ff4c80c4";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_417846f5-47e2-4024-813d-1606ff4c80c4";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_417846f5-47e2-4024-813d-1606ff4c80c4";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2283,12 +2293,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    return "operation_4ad89263-cb75-4545-b87a-f6047176e94e";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    return "operation_417846f5-47e2-4024-813d-1606ff4c80c4";
                 });
             } else {
                 // Create rectangle
@@ -2298,15 +2308,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_4ad89263-cb75-4545-b87a-f6047176e94e";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_4ad89263-cb75-4545-b87a-f6047176e94e" : "operation_4ad89263-cb75-4545-b87a-f6047176e94e";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_417846f5-47e2-4024-813d-1606ff4c80c4";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_417846f5-47e2-4024-813d-1606ff4c80c4" : "operation_417846f5-47e2-4024-813d-1606ff4c80c4";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_4ad89263-cb75-4545-b87a-f6047176e94e")
+        .attr("class", "node-label_417846f5-47e2-4024-813d-1606ff4c80c4")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2315,7 +2325,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_4ad89263-cb75-4545-b87a-f6047176e94e")
+        .attr("class", "type-indicator_417846f5-47e2-4024-813d-1606ff4c80c4")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2333,7 +2343,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_4ad89263-cb75-4545-b87a-f6047176e94e")
+        inner.selectAll(".node_417846f5-47e2-4024-813d-1606ff4c80c4")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2344,14 +2354,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_4ad89263-cb75-4545-b87a-f6047176e94e")
+        .attr("class", "info-button_417846f5-47e2-4024-813d-1606ff4c80c4")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_4ad89263-cb75-4545-b87a-f6047176e94e")
+        .attr("class", "info-icon_417846f5-47e2-4024-813d-1606ff4c80c4")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2367,16 +2377,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_4ad89263-cb75-4545-b87a-f6047176e94e, .info-icon_4ad89263-cb75-4545-b87a-f6047176e94e")
+            nodeGroup.selectAll(".info-button_417846f5-47e2-4024-813d-1606ff4c80c4, .info-icon_417846f5-47e2-4024-813d-1606ff4c80c4")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_4ad89263-cb75-4545-b87a-f6047176e94e").node();
+                const infoButton = nodeGroup.select(".info-button_417846f5-47e2-4024-813d-1606ff4c80c4").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_4ad89263-cb75-4545-b87a-f6047176e94e")
+        inner.selectAll(".node_417846f5-47e2-4024-813d-1606ff4c80c4")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2398,7 +2408,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e" : "collapse-button-disabled_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("class", isExpandable ? "collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4" : "collapse-button-disabled_417846f5-47e2-4024-813d-1606ff4c80c4")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2407,7 +2417,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e" : "collapse-icon-disabled_4ad89263-cb75-4545-b87a-f6047176e94e")
+            .attr("class", isExpandable ? "collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4" : "collapse-icon-disabled_417846f5-47e2-4024-813d-1606ff4c80c4")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2427,7 +2437,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_4ad89263-cb75-4545-b87a-f6047176e94e, .collapse-icon_4ad89263-cb75-4545-b87a-f6047176e94e")
+                nodeGroup.selectAll(".collapse-button_417846f5-47e2-4024-813d-1606ff4c80c4, .collapse-icon_417846f5-47e2-4024-813d-1606ff4c80c4")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2528,16 +2538,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+            clickedNodeElement.classed("highlight-node_417846f5-47e2-4024-813d-1606ff4c80c4", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_4ad89263-cb75-4545-b87a-f6047176e94e", false);
+                clickedNodeElement.classed("highlight-node_417846f5-47e2-4024-813d-1606ff4c80c4", false);
             }, 2000);
 
-            const popup = d3.select("#popup_4ad89263-cb75-4545-b87a-f6047176e94e");
-            const moduleTemplate = d3.select("#module-template_4ad89263-cb75-4545-b87a-f6047176e94e");
-            const tensorOpTemplate = d3.select("#tensor-op-template_4ad89263-cb75-4545-b87a-f6047176e94e");
-            const noInfoMessage = d3.select("#no-info_4ad89263-cb75-4545-b87a-f6047176e94e");
+            const popup = d3.select("#popup_417846f5-47e2-4024-813d-1606ff4c80c4");
+            const moduleTemplate = d3.select("#module-template_417846f5-47e2-4024-813d-1606ff4c80c4");
+            const tensorOpTemplate = d3.select("#tensor-op-template_417846f5-47e2-4024-813d-1606ff4c80c4");
+            const noInfoMessage = d3.select("#no-info_417846f5-47e2-4024-813d-1606ff4c80c4");
             
             const nodeData = adj_list[nodeName];
             
@@ -2545,14 +2555,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_4ad89263-cb75-4545-b87a-f6047176e94e").text(popupTitle);
+            d3.select("#popup-title_417846f5-47e2-4024-813d-1606ff4c80c4").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_4ad89263-cb75-4545-b87a-f6047176e94e");
+            const attrNameRow = d3.select("#attr-name-row_417846f5-47e2-4024-813d-1606ff4c80c4");
 
             if (attrName) {
-                d3.select("#attr-name-value_4ad89263-cb75-4545-b87a-f6047176e94e").text(attrName);
+                d3.select("#attr-name-value_417846f5-47e2-4024-813d-1606ff4c80c4").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2564,31 +2574,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                moduleTemplate.style("display", "block").classed("content-shown_417846f5-47e2-4024-813d-1606ff4c80c4", true);
                 
-                d3.select("#module-extra-repr_4ad89263-cb75-4545-b87a-f6047176e94e").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_417846f5-47e2-4024-813d-1606ff4c80c4").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_4ad89263-cb75-4545-b87a-f6047176e94e").node();
+                const attributesContainer = d3.select("#module-attributes_417846f5-47e2-4024-813d-1606ff4c80c4").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_4ad89263-cb75-4545-b87a-f6047176e94e").node();
+                const parametersContainer = d3.select("#module-parameters_417846f5-47e2-4024-813d-1606ff4c80c4").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_4ad89263-cb75-4545-b87a-f6047176e94e", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_4ad89263-cb75-4545-b87a-f6047176e94e").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_417846f5-47e2-4024-813d-1606ff4c80c4", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_417846f5-47e2-4024-813d-1606ff4c80c4").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                noInfoMessage.style("display", "block").classed("content-shown_417846f5-47e2-4024-813d-1606ff4c80c4", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_4ad89263-cb75-4545-b87a-f6047176e94e").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_417846f5-47e2-4024-813d-1606ff4c80c4").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2604,19 +2614,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_4ad89263-cb75-4545-b87a-f6047176e94e").node().scrollTop = 0;
+            d3.select("#popup-content_417846f5-47e2-4024-813d-1606ff4c80c4").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_4ad89263-cb75-4545-b87a-f6047176e94e").style("display", "none");
+            d3.select("#popup_417846f5-47e2-4024-813d-1606ff4c80c4").style("display", "none");
         }
         
-        d3.select(".popup-close_4ad89263-cb75-4545-b87a-f6047176e94e").on("click", closePopup);
+        d3.select(".popup-close_417846f5-47e2-4024-813d-1606ff4c80c4").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_4ad89263-cb75-4545-b87a-f6047176e94e`);
+        const popup = document.getElementById(`popup_417846f5-47e2-4024-813d-1606ff4c80c4`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_4ad89263-cb75-4545-b87a-f6047176e94e');
+            const editorContainers = popup.querySelectorAll('.json-viewer_417846f5-47e2-4024-813d-1606ff4c80c4');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2695,30 +2705,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_4ad89263-cb75-4545-b87a-f6047176e94e")
+                    const targetElement = inner.selectAll(".node_417846f5-47e2-4024-813d-1606ff4c80c4")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                        targetElement.classed("highlight-node_417846f5-47e2-4024-813d-1606ff4c80c4", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_4ad89263-cb75-4545-b87a-f6047176e94e", false);
+                            targetElement.classed("highlight-node_417846f5-47e2-4024-813d-1606ff4c80c4", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_4ad89263-cb75-4545-b87a-f6047176e94e")
+                    const targetElement = inner.selectAll(".boundary-box_417846f5-47e2-4024-813d-1606ff4c80c4")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_4ad89263-cb75-4545-b87a-f6047176e94e", true);
+                        targetElement.classed("highlight-cluster_417846f5-47e2-4024-813d-1606ff4c80c4", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_4ad89263-cb75-4545-b87a-f6047176e94e", false);
+                            targetElement.classed("highlight-cluster_417846f5-47e2-4024-813d-1606ff4c80c4", false);
                         }, 2000); // Match the animation duration
                     }
                 }
