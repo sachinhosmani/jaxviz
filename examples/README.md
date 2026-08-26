@@ -29,5 +29,16 @@ Generate one example or one program view while iterating:
 python scripts/examples_generator.py flax_nnx_mlp_sharded --view per_device
 ```
 
-Pages are written to `examples/generated/`. The files are standalone and can be
+Pages are written to `docs/examples/`. The files are standalone and can be
 opened directly now or published as static assets later.
+
+## Distributed examples
+
+The distributed tutorials intentionally emulate eight logical CPU devices so
+their `2 × 4` and `8`-way meshes run without accelerator hardware. Run their
+displayed snippets in a fresh Python process, before any other JAX operation.
+Production programs should instead construct meshes from their real devices.
+
+The Flax NNX distributed examples use the explicit state-sharding initialization
+sequence shared by Flax 0.11 and 0.12. Their intermediate activation constraints
+make the illustrated partitioning deterministic rather than compiler-dependent.

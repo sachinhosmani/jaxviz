@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flax NNX MLP, tensor-parallel sharded with compiler-driven (&quot;Auto&quot;) sharding · JAXViz</title>
+    <title>Flax NNX self-attention with data and head parallelism · JAXViz</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/python.min.js"></script>
@@ -160,35 +160,117 @@ from flax import nnx
 from jaxviz import trace_model
 
 
+# This tutorial intentionally simulates an eight-device CPU system.
+try:
+    jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
+except RuntimeError:
+    pass
+cpu_devices = jax.devices(&quot;cpu&quot;)
+if len(cpu_devices) &lt; 8:
+    raise RuntimeError(&quot;Restart Python and run this example before any JAX operation.&quot;)
+
 Auto = jax.sharding.AxisType.Auto
-mesh = jax.make_mesh((8,), (&quot;model&quot;,), axis_types=(Auto,))
-nnx.use_eager_sharding(True)
+mesh = jax.make_mesh(
+    (2, 4),
+    (&quot;data&quot;, &quot;model&quot;),
+    axis_types=(Auto, Auto),
+    devices=cpu_devices,
+)
 
 
-class MLP(nnx.Module):
+@jax.jit
+def attention_weights(query, key):
+    scale = jnp.sqrt(jnp.asarray(query.shape[-1], dtype=query.dtype))
+    scores = jnp.einsum(&quot;bhsd,bhtd-&gt;bhst&quot;, query, key) / scale
+    return jax.nn.softmax(scores, axis=-1)
+
+
+class HeadParallelAttention(nnx.Module):
     def __init__(self, rngs):
+        self.num_heads = 8
+        self.head_dim = 16
+        embedding_dim = self.num_heads * self.head_dim
         init = nnx.initializers.lecun_normal()
-        self.dense0 = nnx.Linear(
-            32, 64, use_bias=False, rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (None, &quot;model&quot;)),  # column-parallel
+
+        # Column-parallel projections assign complete heads to model shards.
+        projection = nnx.with_partitioning(init, (None, &quot;model&quot;))
+        self.query = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
         )
-        self.dense1 = nnx.Linear(
-            64, 32, use_bias=False, rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),  # row-parallel
+        self.key = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
         )
+        self.value = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=projection,
+        )
+        # The row-parallel output projection combines the head shards.
+        self.output = nnx.Linear(
+            embedding_dim,
+            embedding_dim,
+            use_bias=False,
+            rngs=rngs,
+            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),
+        )
+
+    def split_heads(self, x):
+        batch, sequence, _ = x.shape
+        x = x.reshape(batch, sequence, self.num_heads, self.head_dim)
+        return x.transpose(0, 2, 1, 3)
 
     def __call__(self, x):
-        x = self.dense0(x)
-        x = nnx.relu(x)
-        x = self.dense1(x)
-        return x
+        projection_sharding = jax.P(&quot;data&quot;, None, &quot;model&quot;)
+        head_sharding = jax.P(&quot;data&quot;, &quot;model&quot;, None, None)
+
+        query = jax.lax.with_sharding_constraint(self.query(x), projection_sharding)
+        key = jax.lax.with_sharding_constraint(self.key(x), projection_sharding)
+        value = jax.lax.with_sharding_constraint(self.value(x), projection_sharding)
+
+        query = jax.lax.with_sharding_constraint(self.split_heads(query), head_sharding)
+        key = jax.lax.with_sharding_constraint(self.split_heads(key), head_sharding)
+        value = jax.lax.with_sharding_constraint(self.split_heads(value), head_sharding)
+
+        probabilities = attention_weights(query, key)
+        probabilities = jax.lax.with_sharding_constraint(probabilities, head_sharding)
+        context = jnp.einsum(&quot;bhst,bhtd-&gt;bhsd&quot;, probabilities, value)
+        context = jax.lax.with_sharding_constraint(context, head_sharding)
+
+        context = context.transpose(0, 2, 1, 3)
+        context = context.reshape(x.shape)
+        context = jax.lax.with_sharding_constraint(context, projection_sharding)
+        # Expand this module in the per-device graph to see its all-reduce.
+        return self.output(context)
+
+
+@nnx.jit
+def create_sharded_model():
+    model = HeadParallelAttention(nnx.Rngs(0))
+    state = nnx.state(model)
+    partition_specs = nnx.get_partition_spec(state)
+    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
+    nnx.update(model, sharded_state)
+    return model
 
 
 with jax.set_mesh(mesh):
-    model = MLP(nnx.Rngs(0))
-    trace_model(model, example_input, view=&#x27;global&#x27;)
-
-example_input = jnp.ones((16, 32))
+    model = create_sharded_model()
+    # Global (8, 32, 128) becomes local (4, 32, 128) across data replicas.
+    example_input = jax.device_put(
+        jnp.ones((8, 32, 128)),
+        jax.P(&quot;data&quot;, None, None),
+    )
+    trace_model(model, example_input, view=&#x27;per_device&#x27;, collapse_modules_after_depth=1)
 </code></pre>
                 </div>
             </section>
@@ -196,124 +278,124 @@ example_input = jnp.ones((16, 32))
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
-    <div id="graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7"></div>
-    <div class="logo_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
+                <div class="graph-stage"><div id="graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+    <div id="graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
+    <div class="logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7" class="popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="display: none;">
-        <div class="popup-header_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
-            <h3 id="popup-title_233c5269-8d4c-44c0-a263-0a5c3f306fd7"></h3>
-            <span class="popup-close_233c5269-8d4c-44c0-a263-0a5c3f306fd7">✕</span>
+    <div id="popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display: none;">
+        <div class="popup-header_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+            <h3 id="popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></h3>
+            <span class="popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">✕</span>
         </div>
-        <div id="popup-content_233c5269-8d4c-44c0-a263-0a5c3f306fd7" class="popup-content_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
-            <div id="common-info_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
-                <p id="attr-name-row_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+            <div id="common-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+                <p id="attr-name-row_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="display:none;">
-                <details open id="module-parameters-details_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
+            <div id="module-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
+                <details open id="module-parameters-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_233c5269-8d4c-44c0-a263-0a5c3f306fd7" class="json-viewer_233c5269-8d4c-44c0-a263-0a5c3f306fd7"></div>
+                    <div id="module-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
                 </details>
-                <details open id="module-attributes-details_233c5269-8d4c-44c0-a263-0a5c3f306fd7">
+                <details open id="module-attributes-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_233c5269-8d4c-44c0-a263-0a5c3f306fd7" class="json-viewer_233c5269-8d4c-44c0-a263-0a5c3f306fd7"></div>
+                    <div id="module-attributes_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="display:none;">
+            <div id="tensor-op-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_233c5269-8d4c-44c0-a263-0a5c3f306fd7" class="json-viewer_233c5269-8d4c-44c0-a263-0a5c3f306fd7"></div>
+                <div id="tensor-op-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
             </div>
-            <p id="no-info_233c5269-8d4c-44c0-a263-0a5c3f306fd7" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        text.node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        text.type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        text.collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             stroke: #797979;
             fill: none;
         }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.input_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #FF9AFF; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: rgb(235 235 235); }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FF9AFF; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(235 235 235); }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.output_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #74e071; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.failed_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: rgb(224 15 15); }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.module_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #8BDEDB; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect.operation_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #FEBC5A; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #74e071; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(224 15 15); }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #8BDEDB; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FEBC5A; }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse.input_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #FF9AFF; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse.constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: rgb(235 235 235); }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse.output_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #74e071; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse.parameter_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: #B9CCF3; }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse.failed_233c5269-8d4c-44c0-a263-0a5c3f306fd7 { fill: rgb(224 15 15); }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FF9AFF; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(235 235 235); }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #74e071; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.parameter_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #B9CCF3; }
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(224 15 15); }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .edgeLabelGroup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             pointer-events: none;
         }
-        #arrowhead_233c5269-8d4c-44c0-a263-0a5c3f306fd7 path {
+        #arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c path {
             fill: #333333;;
         }
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect,
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 ellipse {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 .type-indicator_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c .type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7.error_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7.error_233c5269-8d4c-44c0-a263-0a5c3f306fd7 > rect:first-of-type {
+        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             height: 100%;
         }
         
-        .popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -328,7 +410,7 @@ example_input = jnp.ones((16, 32))
             flex-direction: column;
         }
 
-        .popup-header_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .popup-header_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: sticky;
             top: 0;
             background: white;
@@ -340,12 +422,12 @@ example_input = jnp.ones((16, 32))
             z-index: 1;
         }
 
-        .popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7 h3 {
+        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -353,87 +435,87 @@ example_input = jnp.ones((16, 32))
             flex-grow: 1;
         }
 
-        .popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7 pre {
+        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: relative;
         }
 
-        #graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 pre {
+        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             pointer-events: none;
         }
-        .boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7 text {
+        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             pointer-events: none;
         }
-        .boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7 text {
+        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7 text {
+        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7, .info-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover, .info-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        .collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover, .info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7, .info-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        .collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .collapse-icon-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -442,23 +524,23 @@ example_input = jnp.ones((16, 32))
         }
 
         /* Edge hover styles */
-        .edge-group_233c5269-8d4c-44c0-a263-0a5c3f306fd7 path {
+        .edge-group_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c path {
             pointer-events: stroke;
         }
 
-        .edge-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             pointer-events: all;
         }
 
-        .edge-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7.has-shape-details_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.has-shape-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             cursor: help;
         }
 
-        .edge-shape-info-badge_233c5269-8d4c-44c0-a263-0a5c3f306fd7 circle {
+        .edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_233c5269-8d4c-44c0-a263-0a5c3f306fd7 text {
+        .edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -500,50 +582,50 @@ example_input = jnp.ones((16, 32))
             }
         }
 
-        .highlight-cluster_233c5269-8d4c-44c0-a263-0a5c3f306fd7 > rect:first-of-type {
+        .highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        text.node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7.constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7 .node-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c .node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             font-size: 0.7rem;
         }
 
-        .popup-content_233c5269-8d4c-44c0-a263-0a5c3f306fd7 summary {
+        .popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7.input_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect,
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7.output_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect,
-        .node_233c5269-8d4c-44c0-a263-0a5c3f306fd7.constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
+        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #png-error-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #png-error-message_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -554,13 +636,13 @@ example_input = jnp.ones((16, 32))
             text-align: left;
         }
 
-        #png-link-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -570,11 +652,11 @@ example_input = jnp.ones((16, 32))
             margin-right: 8px;
         }
 
-        #png-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        #png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -583,18 +665,18 @@ example_input = jnp.ones((16, 32))
             border-radius: 4px;
         }
 
-        #png-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        #png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #svg-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -604,11 +686,11 @@ example_input = jnp.ones((16, 32))
             margin-right: 8px;
         }
 
-        #svg-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        #svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        #svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -617,11 +699,11 @@ example_input = jnp.ones((16, 32))
             border-radius: 4px;
         }
 
-        #svg-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7:hover {
+        #svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .custom-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -637,7 +719,7 @@ example_input = jnp.ones((16, 32))
             display: none;
         }
 
-        .custom-tooltip_smaller_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .custom-tooltip_smaller_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -653,7 +735,7 @@ example_input = jnp.ones((16, 32))
             display: none;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -667,71 +749,71 @@ example_input = jnp.ones((16, 32))
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 table {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 th {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-dimension_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 svg {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 line {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 polygon {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 rect {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 td.shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7 text {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7 tr.shape-connectors_233c5269-8d4c-44c0-a263-0a5c3f306fd7 th {
+        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c tr.shape-connectors_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7.implied-edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.implied-edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             stroke-dasharray: 5,5;
         }
 
-        .logo_233c5269-8d4c-44c0-a263-0a5c3f306fd7 {
+        .logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_233c5269-8d4c-44c0-a263-0a5c3f306fd7 a {
+        .logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -892,20 +974,20 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 32)", "edge_data_id": 4728672512}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(32, 64)", "edge_data_id": 4720528256}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_3", "dims": "(64, 32)", "edge_data_id": 4729253632}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "relu_2", "dims": "(16, 64)", "edge_data_id": 4719891840}], "failed": false, "node_type": "Operation"}, "relu_2": {"edges": [{"target": "dot_general_3", "dims": "(16, 64)", "edge_data_id": 4729256576}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "output_0", "dims": "(16, 32)", "edge_data_id": 4719734592}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
-    const module_info = {"scope_MLP_dense0": {"type": "dense0", "parameters": {}, "attributes": {}}, "scope_MLP": {"type": "MLP", "parameters": {}, "attributes": {}}, "scope_MLP_dense1": {"type": "dense1", "parameters": {}, "attributes": {}}};
-    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [32, 64], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "relu_2": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}], "keyword_args": {"jvp_jaxpr_fun": "Wrapped function:\n\nCore: memoized\n", "num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_3": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}, {"_type": "tensor", "shape": [64, 32], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
-    const parent_module_to_nodes = {"scope_MLP_dense0": ["dot_general_1"], "scope_MLP": ["dot_general_1", "relu_2", "dot_general_3"], "scope_MLP_dense1": ["dot_general_3"]};
-    const parent_module_to_depth = {"scope_MLP_dense0": 1, "scope_MLP": 2, "scope_MLP_dense1": 1};
-    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "relu_2": "relu", "scope_MLP_dense1": "dense1", "dot_general_3": "dot_general", "output_0": "output"};
-    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "relu_2": "relu", "scope_MLP_dense1": "dense1", "dot_general_3": "dot_general", "output_0": "output_0"};
-    const node_to_attr_name = {};
-    const ancestor_map = {"param_0": "scope_MLP_dense0", "scope_MLP_dense0": "scope_MLP", "param_1": "scope_MLP_dense1", "scope_MLP_dense1": "scope_MLP", "dot_general_1": "scope_MLP_dense0", "relu_2": "scope_MLP", "dot_general_3": "scope_MLP_dense1"};
+    const adj_list = {"param_2": {"edges": [{"target": "dot_1", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_2->dot_1"}], "failed": false, "node_type": "Parameter"}, "param_4": {"edges": [{"target": "dot_5", "dims": "(32, 128)", "shape_info": {"global": [128, 128], "local": [32, 128], "partitions": [4, 1], "axes": [[{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "param_4->dot_5"}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_1->dot"}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "dot_3", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_3->dot_3"}], "failed": false, "node_type": "Parameter"}, "param": {"edges": [{"target": "dot", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot"}, {"target": "dot_1", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_1"}, {"target": "dot_3", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_3"}], "failed": false, "node_type": "Input"}, "dot": {"edges": [{"target": "sharding_constraint_18", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot->sharding_constraint_18"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_18": {"edges": [{"target": "reshape_9", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_18->reshape_9"}], "failed": false, "node_type": "Operation"}, "reshape_9": {"edges": [{"target": "transpose_8", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_9->transpose_8"}], "failed": false, "node_type": "Operation"}, "transpose_8": {"edges": [{"target": "sharding_constraint_19", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_8->sharding_constraint_19"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_19": {"edges": [{"target": "dot_2", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_19->dot_2"}], "failed": false, "node_type": "Operation"}, "dot_1": {"edges": [{"target": "sharding_constraint_20", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot_1->sharding_constraint_20"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_20": {"edges": [{"target": "reshape_11", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_20->reshape_11"}], "failed": false, "node_type": "Operation"}, "reshape_11": {"edges": [{"target": "transpose_9", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_11->transpose_9"}], "failed": false, "node_type": "Operation"}, "transpose_9": {"edges": [{"target": "sharding_constraint_21", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_9->sharding_constraint_21"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_21": {"edges": [{"target": "dot_2", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_21->dot_2"}], "failed": false, "node_type": "Operation"}, "dot_2": {"edges": [{"target": "div_19", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "dot_2->div_19"}], "failed": false, "node_type": "Operation"}, "constant_13": {"edges": [{"target": "div_18", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_13->div_18"}], "failed": false, "node_type": "Constant"}, "div_18": {"edges": [{"target": "div_19", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_18->div_19"}], "failed": false, "node_type": "Operation"}, "div_19": {"edges": [{"target": "reduce", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_19->reduce"}, {"target": "sub_15", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_19->sub_15"}], "failed": false, "node_type": "Operation"}, "constant_14": {"edges": [{"target": "reduce", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_14->reduce"}, {"target": "max_6", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_14->max_6"}], "failed": false, "node_type": "Constant"}, "reduce": {"edges": [{"target": "max_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reduce->max_7"}], "failed": false, "node_type": "Operation"}, "max_6": {"edges": [{"target": "max_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "max_6->max_7"}], "failed": false, "node_type": "Operation"}, "max_7": {"edges": [{"target": "broadcast_in_dim_6", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "max_7->broadcast_in_dim_6"}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_6": {"edges": [{"target": "sub_12", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "broadcast_in_dim_6->sub_12"}], "failed": false, "node_type": "Operation"}, "sub_12": {"edges": [{"target": "sub_13", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_12->sub_13"}], "failed": false, "node_type": "Operation"}, "sub_13": {"edges": [{"target": "sub_14", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "sub_13->sub_14"}], "failed": false, "node_type": "Operation"}, "sub_14": {"edges": [{"target": "sub_15", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_14->sub_15"}], "failed": false, "node_type": "Operation"}, "sub_15": {"edges": [{"target": "exp_3", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_15->exp_3"}], "failed": false, "node_type": "Operation"}, "exp_3": {"edges": [{"target": "reduce_1", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_3->reduce_1"}, {"target": "div_23", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_3->div_23"}], "failed": false, "node_type": "Operation"}, "constant_15": {"edges": [{"target": "reduce_1", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_15->reduce_1"}], "failed": false, "node_type": "Constant"}, "reduce_1": {"edges": [{"target": "broadcast_in_dim_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reduce_1->broadcast_in_dim_7"}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_7": {"edges": [{"target": "div_20", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "broadcast_in_dim_7->div_20"}], "failed": false, "node_type": "Operation"}, "div_20": {"edges": [{"target": "div_21", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_20->div_21"}], "failed": false, "node_type": "Operation"}, "div_21": {"edges": [{"target": "div_22", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "div_21->div_22"}], "failed": false, "node_type": "Operation"}, "div_22": {"edges": [{"target": "div_23", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_22->div_23"}], "failed": false, "node_type": "Operation"}, "div_23": {"edges": [{"target": "sharding_constraint_22", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_23->sharding_constraint_22"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_22": {"edges": [{"target": "dot_4", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_22->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_3": {"edges": [{"target": "sharding_constraint_23", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot_3->sharding_constraint_23"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_23": {"edges": [{"target": "reshape_13", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_23->reshape_13"}], "failed": false, "node_type": "Operation"}, "reshape_13": {"edges": [{"target": "transpose_10", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_13->transpose_10"}], "failed": false, "node_type": "Operation"}, "transpose_10": {"edges": [{"target": "sharding_constraint_24", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_10->sharding_constraint_24"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_24": {"edges": [{"target": "dot_4", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_24->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_4": {"edges": [{"target": "sharding_constraint_25", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "dot_4->sharding_constraint_25"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_25": {"edges": [{"target": "transpose_11", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_25->transpose_11"}], "failed": false, "node_type": "Operation"}, "transpose_11": {"edges": [{"target": "reshape_14", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "transpose_11->reshape_14"}], "failed": false, "node_type": "Operation"}, "reshape_14": {"edges": [{"target": "sharding_constraint_26", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "reshape_14->sharding_constraint_26"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_26": {"edges": [{"target": "dot_5", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_26->dot_5"}], "failed": false, "node_type": "Operation"}, "dot_5": {"edges": [{"target": "all_reduce", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "dot_5->all_reduce"}], "failed": false, "node_type": "Operation"}, "all_reduce": {"edges": [{"target": "output_0", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "all_reduce->output_0"}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const module_info = {"mod_query": {"name": "query", "path": "query", "depth": 0}, "mod_attention_weights": {"name": "attention_weights", "path": "attention_weights", "depth": 0}, "mod_value": {"name": "value", "path": "value", "depth": 0}, "mod_output": {"name": "output", "path": "output", "depth": 0}, "mod_key": {"name": "key", "path": "key", "depth": 0}};
+    const func_info = {"param_2": {"positional_args": [], "keyword_args": {}}, "param_4": {"positional_args": [], "keyword_args": {}}, "param_1": {"positional_args": [], "keyword_args": {}}, "param_3": {"positional_args": [], "keyword_args": {}}, "param": {"positional_args": [], "keyword_args": {}}, "dot": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_18": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_9": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_8": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_19": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_1": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_20": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_11": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_9": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_21": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_2": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,1}", "lhs_contracting_dims": "{3}", "rhs_batch_dims": "{0,1}", "rhs_contracting_dims": "{3}"}}, "constant_13": {"positional_args": [], "keyword_args": {}}, "div_18": {"positional_args": [4.0], "keyword_args": {"dimensions": "{}"}}, "div_19": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_14": {"positional_args": [], "keyword_args": {}}, "reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, -Infinity], "keyword_args": {"dimensions": "{3}", "to_apply": "%region_0.0"}}, "max_6": {"positional_args": [-Infinity], "keyword_args": {"dimensions": "{}"}}, "max_7": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "broadcast_in_dim_6": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "sub_12": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "sub_13": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "sub_14": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2}"}}, "sub_15": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "exp_3": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_15": {"positional_args": [], "keyword_args": {}}, "reduce_1": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, 0.0], "keyword_args": {"dimensions": "{3}", "to_apply": "%region_1.0"}}, "broadcast_in_dim_7": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "div_20": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "div_21": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "div_22": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2}"}}, "div_23": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "sharding_constraint_22": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "dot_3": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_23": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_13": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_10": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_24": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_4": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,1}", "lhs_contracting_dims": "{3}", "rhs_batch_dims": "{0,1}", "rhs_contracting_dims": "{2}"}}, "sharding_constraint_25": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "transpose_11": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "reshape_14": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {}}, "sharding_constraint_26": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "dot_5": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [32, 128], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "all_reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}], "keyword_args": {"channel_id": "1", "replica_groups": "[2,4]<=[8]", "use_global_device_ids": "true", "to_apply": "%add.clone"}}};
+    const parent_module_to_nodes = {"mod_key": ["param_2"], "mod_output": ["param_4"], "mod_query": ["param_1"], "mod_value": ["param_3"], "mod_attention_weights": ["dot_2", "div_18", "div_19", "reduce", "max_6", "max_7", "broadcast_in_dim_6", "sub_12", "sub_13", "sub_14", "sub_15", "exp_3", "reduce_1", "broadcast_in_dim_7", "div_20", "div_21", "div_22", "div_23"]};
+    const parent_module_to_depth = {"mod_query": 0, "mod_attention_weights": 0, "mod_value": 0, "mod_output": 0, "mod_key": 0};
+    const graph_node_name_to_without_suffix = {"param_2": "param", "param_4": "param", "param_1": "param", "param_3": "param", "param": "input", "dot": "dot", "sharding_constraint_18": "copy", "reshape_9": "reshape", "transpose_8": "transpose", "sharding_constraint_19": "copy", "dot_1": "dot", "sharding_constraint_20": "copy", "reshape_11": "reshape", "transpose_9": "transpose", "sharding_constraint_21": "copy", "dot_2": "dot", "constant_13": "constant", "div_18": "broadcast", "div_19": "divide", "constant_14": "constant", "reduce": "reduce", "max_6": "broadcast", "max_7": "maximum", "broadcast_in_dim_6": "reshape", "sub_12": "broadcast", "sub_13": "reshape", "sub_14": "broadcast", "sub_15": "subtract", "exp_3": "exponential", "constant_15": "constant", "reduce_1": "reduce", "broadcast_in_dim_7": "reshape", "div_20": "broadcast", "div_21": "reshape", "div_22": "broadcast", "div_23": "divide", "sharding_constraint_22": "copy", "dot_3": "dot", "sharding_constraint_23": "copy", "reshape_13": "reshape", "transpose_10": "transpose", "sharding_constraint_24": "copy", "dot_4": "dot", "sharding_constraint_25": "copy", "transpose_11": "transpose", "reshape_14": "reshape", "sharding_constraint_26": "copy", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output", "mod_query": "query", "mod_attention_weights": "attention_weights", "mod_value": "value", "mod_output": "output", "mod_key": "key"};
+    const graph_node_display_names = {"param_2": "key.kernel", "param_4": "output.kernel", "param_1": "query.kernel", "param_3": "value.kernel", "param": "args[0]", "dot": "dot", "sharding_constraint_18": "copy", "reshape_9": "reshape", "transpose_8": "transpose", "sharding_constraint_19": "copy", "dot_1": "dot", "sharding_constraint_20": "copy", "reshape_11": "reshape", "transpose_9": "transpose", "sharding_constraint_21": "copy", "dot_2": "dot", "constant_13": "constant", "div_18": "broadcast", "div_19": "divide", "constant_14": "constant", "reduce": "reduce", "max_6": "broadcast", "max_7": "maximum", "broadcast_in_dim_6": "reshape", "sub_12": "broadcast", "sub_13": "reshape", "sub_14": "broadcast", "sub_15": "subtract", "exp_3": "exponential", "constant_15": "constant", "reduce_1": "reduce", "broadcast_in_dim_7": "reshape", "div_20": "broadcast", "div_21": "reshape", "div_22": "broadcast", "div_23": "divide", "sharding_constraint_22": "copy", "dot_3": "dot", "sharding_constraint_23": "copy", "reshape_13": "reshape", "transpose_10": "transpose", "sharding_constraint_24": "copy", "dot_4": "dot", "sharding_constraint_25": "copy", "transpose_11": "transpose", "reshape_14": "reshape", "sharding_constraint_26": "copy", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output_0", "mod_query": "query", "mod_attention_weights": "attention_weights", "mod_value": "value", "mod_output": "output", "mod_key": "key"};
+    const node_to_attr_name = {"param_2": "kernel", "param_4": "kernel", "param_1": "kernel", "param_3": "kernel"};
+    const ancestor_map = {"mod_query": null, "mod_attention_weights": null, "mod_value": null, "mod_output": null, "mod_key": null, "param_2": "mod_key", "param_4": "mod_output", "param_1": "mod_query", "param_3": "mod_value", "param": null, "dot": null, "sharding_constraint_18": null, "reshape_9": null, "transpose_8": null, "sharding_constraint_19": null, "dot_1": null, "sharding_constraint_20": null, "reshape_11": null, "transpose_9": null, "sharding_constraint_21": null, "dot_2": "mod_attention_weights", "constant_13": null, "div_18": "mod_attention_weights", "div_19": "mod_attention_weights", "constant_14": null, "reduce": "mod_attention_weights", "max_6": "mod_attention_weights", "max_7": "mod_attention_weights", "broadcast_in_dim_6": "mod_attention_weights", "sub_12": "mod_attention_weights", "sub_13": "mod_attention_weights", "sub_14": "mod_attention_weights", "sub_15": "mod_attention_weights", "exp_3": "mod_attention_weights", "constant_15": null, "reduce_1": "mod_attention_weights", "broadcast_in_dim_7": "mod_attention_weights", "div_20": "mod_attention_weights", "div_21": "mod_attention_weights", "div_22": "mod_attention_weights", "div_23": "mod_attention_weights", "sharding_constraint_22": null, "dot_3": null, "sharding_constraint_23": null, "reshape_13": null, "transpose_10": null, "sharding_constraint_24": null, "dot_4": null, "sharding_constraint_25": null, "transpose_11": null, "reshape_14": null, "sharding_constraint_26": null, "dot_5": null, "all_reduce": null, "output_0": null};
     const repeat_containers = new Set([]);
     const REPEAT_CONTAINER_COLOR = "#FA8334";
     const collapse_modules_after_depth = 1;
     const show_module_attr_names = false;
-    const node_to_module_path = {'dot_general_1': 'dot_general', 'relu_2': 'custom_jvp_call', 'dot_general_3': 'dot_general'};
+    const node_to_module_path = {'param_2': 'key', 'param_4': 'output', 'param_1': 'query', 'param_3': 'value', 'param': '', 'dot': '', 'sharding_constraint_18': '', 'reshape_9': '', 'transpose_8': '', 'sharding_constraint_19': '', 'dot_1': '', 'sharding_constraint_20': '', 'reshape_11': '', 'transpose_9': '', 'sharding_constraint_21': '', 'dot_2': 'attention_weights', 'constant_13': '', 'div_18': 'attention_weights', 'div_19': 'attention_weights', 'constant_14': '', 'reduce': 'attention_weights', 'max_6': 'attention_weights', 'max_7': 'attention_weights', 'broadcast_in_dim_6': 'attention_weights', 'sub_12': 'attention_weights', 'sub_13': 'attention_weights', 'sub_14': 'attention_weights', 'sub_15': 'attention_weights', 'exp_3': 'attention_weights', 'constant_15': '', 'reduce_1': 'attention_weights', 'broadcast_in_dim_7': 'attention_weights', 'div_20': 'attention_weights', 'div_21': 'attention_weights', 'div_22': 'attention_weights', 'div_23': 'attention_weights', 'sharding_constraint_22': '', 'dot_3': '', 'sharding_constraint_23': '', 'reshape_13': '', 'transpose_10': '', 'sharding_constraint_24': '', 'dot_4': '', 'sharding_constraint_25': '', 'transpose_11': '', 'reshape_14': '', 'sharding_constraint_26': '', 'dot_5': '', 'all_reduce': '', 'output_0': ''};
     const generateImage = false;
     const generateSvg = false;
     const show_modular_view = false;
@@ -942,10 +1024,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7` : `custom-tooltip_smaller_233c5269-8d4c-44c0-a263-0a5c3f306fd7`;
+        tooltip.className = !smaller ? `custom-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c` : `custom-tooltip_smaller_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7`);
+        const container = document.getElementById(`graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -957,7 +1039,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -992,7 +1074,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+            if (isDimension) cell.className = "shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
         };
 
         addCell(label ? "(" : "");
@@ -1056,7 +1138,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+        row.className = "shape-connectors_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1076,7 +1158,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_233c5269-8d4c-44c0-a263-0a5c3f306fd7 shape-connector_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+            cell.className = "shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1143,7 +1225,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+        const container = document.getElementById("graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
         const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
@@ -1171,14 +1253,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+        tooltip.className = "shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+        const container = document.getElementById("graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1798,7 +1880,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7").html("");
+        d3.select("#graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1865,16 +1947,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7").remove();
+        d3.select("#png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node().parentNode;
+            const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
-                .attr("id", "png-error-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+                .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                .attr("id", "png-error-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                .attr("id", "png-error-message_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1912,21 +1994,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node().parentNode;
+        const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
-            .attr("id", "png-link-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+            .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("id", "png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("id", "png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7.png`)
-            .attr("id", "png-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("download", `jaxviz_graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.png`)
+            .attr("id", "png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1947,26 +2029,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node().parentNode;
+        const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
-            .attr("id", "svg-link-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+            .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("id", "svg-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("id", "svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7.svg`)
-            .attr("id", "svg-save-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("download", `jaxviz_graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.svg`)
+            .attr("id", "svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        const svg = d3.select("#graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1980,7 +2062,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_233c5269-8d4c-44c0-a263-0a5c3f306fd7") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -1998,7 +2080,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        .attr("id", "arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2010,11 +2092,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        const clusters = inner.selectAll(".boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+        .attr("class", "boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2024,10 +2106,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                group.classed("error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                group.classed("repeat-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
             }
 
             // Parse bounding box coordinates
@@ -2069,13 +2151,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                .attr("class", "collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                .attr("class", "collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2092,7 +2174,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7, .collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        clusters.selectAll(".collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2107,19 +2189,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        const edges = inner.selectAll(".edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+        .attr("class", "edge-group_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7 implied-edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+                return "edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c implied-edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
             }
-            return "edge_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+            return "edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2145,7 +2227,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_233c5269-8d4c-44c0-a263-0a5c3f306fd7)");
+        .attr("marker-end", "url(#arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2171,10 +2253,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                labelGroup.classed("has-shape-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                .attr("class", "edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2210,7 +2292,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("class", "edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2222,7 +2304,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+            const labelGroup = edgeGroup.select(".edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2263,19 +2345,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        const nodes = inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+                let classes = "node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2303,12 +2385,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    return "operation_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    return "operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
                 });
             } else {
                 // Create rectangle
@@ -2318,15 +2400,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_233c5269-8d4c-44c0-a263-0a5c3f306fd7" : "operation_233c5269-8d4c-44c0-a263-0a5c3f306fd7";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        .attr("class", "node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2335,7 +2417,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        .attr("class", "type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2353,7 +2435,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2364,14 +2446,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        .attr("class", "info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        .attr("class", "info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2387,16 +2469,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7, .info-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            nodeGroup.selectAll(".info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node();
+                const infoButton = nodeGroup.select(".info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+        inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2418,7 +2500,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7" : "collapse-button-disabled_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("class", isExpandable ? "collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2427,7 +2509,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7" : "collapse-icon-disabled_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+            .attr("class", isExpandable ? "collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "collapse-icon-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2447,7 +2529,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_233c5269-8d4c-44c0-a263-0a5c3f306fd7, .collapse-icon_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                nodeGroup.selectAll(".collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2548,16 +2630,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+            clickedNodeElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_233c5269-8d4c-44c0-a263-0a5c3f306fd7", false);
+                clickedNodeElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
             }, 2000);
 
-            const popup = d3.select("#popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
-            const moduleTemplate = d3.select("#module-template_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
-            const tensorOpTemplate = d3.select("#tensor-op-template_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
-            const noInfoMessage = d3.select("#no-info_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+            const popup = d3.select("#popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const moduleTemplate = d3.select("#module-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const tensorOpTemplate = d3.select("#tensor-op-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const noInfoMessage = d3.select("#no-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
             
             const nodeData = adj_list[nodeName];
             
@@ -2565,14 +2647,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_233c5269-8d4c-44c0-a263-0a5c3f306fd7").text(popupTitle);
+            d3.select("#popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_233c5269-8d4c-44c0-a263-0a5c3f306fd7");
+            const attrNameRow = d3.select("#attr-name-row_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
 
             if (attrName) {
-                d3.select("#attr-name-value_233c5269-8d4c-44c0-a263-0a5c3f306fd7").text(attrName);
+                d3.select("#attr-name-value_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2584,31 +2666,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                moduleTemplate.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
                 
-                d3.select("#module-extra-repr_233c5269-8d4c-44c0-a263-0a5c3f306fd7").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node();
+                const attributesContainer = d3.select("#module-attributes_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node();
+                const parametersContainer = d3.select("#module-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                noInfoMessage.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2624,19 +2706,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_233c5269-8d4c-44c0-a263-0a5c3f306fd7").node().scrollTop = 0;
+            d3.select("#popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7").style("display", "none");
+            d3.select("#popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").style("display", "none");
         }
         
-        d3.select(".popup-close_233c5269-8d4c-44c0-a263-0a5c3f306fd7").on("click", closePopup);
+        d3.select(".popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_233c5269-8d4c-44c0-a263-0a5c3f306fd7`);
+        const popup = document.getElementById(`popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_233c5269-8d4c-44c0-a263-0a5c3f306fd7');
+            const editorContainers = popup.querySelectorAll('.json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2715,30 +2797,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                    const targetElement = inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                        targetElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_233c5269-8d4c-44c0-a263-0a5c3f306fd7", false);
+                            targetElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_233c5269-8d4c-44c0-a263-0a5c3f306fd7")
+                    const targetElement = inner.selectAll(".boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_233c5269-8d4c-44c0-a263-0a5c3f306fd7", true);
+                        targetElement.classed("highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_233c5269-8d4c-44c0-a263-0a5c3f306fd7", false);
+                            targetElement.classed("highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
                         }, 2000); // Match the animation duration
                     }
                 }

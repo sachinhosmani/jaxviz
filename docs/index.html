@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Interactive JAXViz model examples.">
+    <title>JAXViz Examples</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        :root {
+            color-scheme: light;
+            font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #25251f;
+            background: #f3f3eb;
+        }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(circle at 15% 0%, rgba(121, 94, 173, 0.12), transparent 30rem),
+                #f3f3eb;
+        }
+
+        main {
+            width: min(920px, calc(100% - 40px));
+            margin: 0 auto;
+            padding: 72px 0 96px;
+        }
+
+        header {
+            margin-bottom: 58px;
+        }
+
+        .eyebrow {
+            margin: 0 0 10px;
+            color: #7456a3;
+            font-size: 13px;
+            font-weight: 750;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(42px, 8vw, 72px);
+            font-weight: 760;
+            letter-spacing: -0.055em;
+            line-height: 0.98;
+        }
+
+        .intro {
+            max-width: 650px;
+            margin: 22px 0 0;
+            color: #65655e;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+
+        .group + .group {
+            margin-top: 54px;
+        }
+
+        h2 {
+            margin: 0 0 14px;
+            color: #77776f;
+            font-size: 13px;
+            font-weight: 750;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .model-list {
+            border-top: 1px solid #d2d2c8;
+        }
+
+        .model {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 28px;
+            align-items: center;
+            padding: 23px 0;
+            border-bottom: 1px solid #d2d2c8;
+        }
+
+        h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .description {
+            margin: 7px 0 0;
+            color: #707068;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 38px;
+            padding: 0 14px;
+            border: 1px solid #bdb5c9;
+            border-radius: 999px;
+            color: #5d3f8b;
+            background: rgba(255, 255, 255, 0.38);
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+        }
+
+        a:hover {
+            border-color: #7456a3;
+            background: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        a:focus-visible {
+            outline: 3px solid rgba(116, 86, 163, 0.28);
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 650px) {
+            main {
+                width: min(100% - 28px, 920px);
+                padding-top: 48px;
+            }
+
+            header {
+                margin-bottom: 44px;
+            }
+
+            .model {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .links {
+                justify-content: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <p class="eyebrow">JAXViz</p>
+            <h1>Model examples</h1>
+            <p class="intro">Explore JAX forward passes alongside the code that produced them. Distributed examples include both the logical global program and the partitioned per-device program.</p>
+        </header>
+
+        <section class="group" aria-labelledby="foundations-heading">
+            <h2 id="foundations-heading">Foundations</h2>
+            <div class="model-list">
+                <article class="model">
+                    <div>
+                        <h3>Flax NNX MLP</h3>
+                        <p class="description">A small multilayer perceptron with nested NNX module scopes.</p>
+                    </div>
+                    <div class="links"><a href="examples/flax_nnx_mlp.html">Open example</a></div>
+                </article>
+                <article class="model">
+                    <div>
+                        <h3>Flax Linen MLP</h3>
+                        <p class="description">The same basic architecture expressed with Flax Linen.</p>
+                    </div>
+                    <div class="links"><a href="examples/flax_mlp.html">Open example</a></div>
+                </article>
+                <article class="model">
+                    <div>
+                        <h3>Equinox MLP</h3>
+                        <p class="description">A compact Equinox model traced as a plain JAX callable.</p>
+                    </div>
+                    <div class="links"><a href="examples/equinox_mlp.html">Open example</a></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="group" aria-labelledby="distributed-heading">
+            <h2 id="distributed-heading">Distributed MLPs</h2>
+            <div class="model-list">
+                <article class="model">
+                    <div>
+                        <h3>Tensor-parallel MLP</h3>
+                        <p class="description">Column- and row-parallel linear layers across one model axis.</p>
+                    </div>
+                    <div class="links">
+                        <a href="examples/flax_nnx_mlp_sharded_global.html">Global</a>
+                        <a href="examples/flax_nnx_mlp_sharded_per_device.html">Per-device</a>
+                    </div>
+                </article>
+                <article class="model">
+                    <div>
+                        <h3>2D-parallel MLP</h3>
+                        <p class="description">Data parallelism and tensor parallelism combined on a 2 × 4 mesh.</p>
+                    </div>
+                    <div class="links">
+                        <a href="examples/flax_nnx_mlp_2d_parallel_global.html">Global</a>
+                        <a href="examples/flax_nnx_mlp_2d_parallel_per_device.html">Per-device</a>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="group" aria-labelledby="attention-heading">
+            <h2 id="attention-heading">Attention</h2>
+            <div class="model-list">
+                <article class="model">
+                    <div>
+                        <h3>Head-parallel self-attention</h3>
+                        <p class="description">Batch sharding across data devices and complete attention heads across model devices.</p>
+                    </div>
+                    <div class="links">
+                        <a href="examples/flax_nnx_head_parallel_attention_global.html">Global</a>
+                        <a href="examples/flax_nnx_head_parallel_attention_per_device.html">Per-device</a>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

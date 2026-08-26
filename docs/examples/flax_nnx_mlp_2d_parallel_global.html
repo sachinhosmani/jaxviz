@@ -160,13 +160,24 @@ from flax import nnx
 from jaxviz import trace_model
 
 
+# This tutorial intentionally simulates an eight-device CPU system. Configure
+# devices before the first JAX operation; production code should use its real
+# accelerator devices instead.
+try:
+    jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
+except RuntimeError:
+    pass
+cpu_devices = jax.devices(&quot;cpu&quot;)
+if len(cpu_devices) &lt; 8:
+    raise RuntimeError(&quot;Restart Python and run this example before any JAX operation.&quot;)
+
 Auto = jax.sharding.AxisType.Auto
 mesh = jax.make_mesh(
     (2, 4),
     (&quot;data&quot;, &quot;model&quot;),
     axis_types=(Auto, Auto),
+    devices=cpu_devices,
 )
-nnx.use_eager_sharding(True)
 
 
 class MLP(nnx.Module):
@@ -191,13 +202,24 @@ class MLP(nnx.Module):
 
     def __call__(self, x):
         x = self.dense0(x)
+        x = jax.lax.with_sharding_constraint(x, jax.P(&quot;data&quot;, &quot;model&quot;))
         x = nnx.relu(x)
         x = self.dense1(x)
         return x
 
 
-with jax.set_mesh(mesh):
+@nnx.jit
+def create_sharded_model():
     model = MLP(nnx.Rngs(0))
+    state = nnx.state(model)
+    partition_specs = nnx.get_partition_spec(state)
+    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
+    nnx.update(model, sharded_state)
+    return model
+
+
+with jax.set_mesh(mesh):
+    model = create_sharded_model()
     # Global (16, 32) becomes local (8, 32) on each data replica.
     example_input = jax.device_put(jnp.ones((16, 32)), jax.P(&quot;data&quot;, None))
     trace_model(model, example_input, view=&#x27;global&#x27;, collapse_modules_after_depth=2)
@@ -208,124 +230,124 @@ with jax.set_mesh(mesh):
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
-    <div id="graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc"></div>
-    <div class="logo_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
+                <div class="graph-stage"><div id="graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
+    <div id="graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9"></div>
+    <div class="logo_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" class="popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="display: none;">
-        <div class="popup-header_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
-            <h3 id="popup-title_e01f56e9-d2f8-40fd-aa7f-15f4933251fc"></h3>
-            <span class="popup-close_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">✕</span>
+    <div id="popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9" class="popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="display: none;">
+        <div class="popup-header_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
+            <h3 id="popup-title_e01ef755-d0c4-48b1-a025-383cc62cf0b9"></h3>
+            <span class="popup-close_e01ef755-d0c4-48b1-a025-383cc62cf0b9">✕</span>
         </div>
-        <div id="popup-content_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" class="popup-content_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
-            <div id="common-info_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
-                <p id="attr-name-row_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_e01ef755-d0c4-48b1-a025-383cc62cf0b9" class="popup-content_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
+            <div id="common-info_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
+                <p id="attr-name-row_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="display:none;">
-                <details open id="module-parameters-details_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
+            <div id="module-template_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="display:none;">
+                <details open id="module-parameters-details_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" class="json-viewer_e01f56e9-d2f8-40fd-aa7f-15f4933251fc"></div>
+                    <div id="module-parameters_e01ef755-d0c4-48b1-a025-383cc62cf0b9" class="json-viewer_e01ef755-d0c4-48b1-a025-383cc62cf0b9"></div>
                 </details>
-                <details open id="module-attributes-details_e01f56e9-d2f8-40fd-aa7f-15f4933251fc">
+                <details open id="module-attributes-details_e01ef755-d0c4-48b1-a025-383cc62cf0b9">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" class="json-viewer_e01f56e9-d2f8-40fd-aa7f-15f4933251fc"></div>
+                    <div id="module-attributes_e01ef755-d0c4-48b1-a025-383cc62cf0b9" class="json-viewer_e01ef755-d0c4-48b1-a025-383cc62cf0b9"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="display:none;">
+            <div id="tensor-op-template_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" class="json-viewer_e01f56e9-d2f8-40fd-aa7f-15f4933251fc"></div>
+                <div id="tensor-op-parameters_e01ef755-d0c4-48b1-a025-383cc62cf0b9" class="json-viewer_e01ef755-d0c4-48b1-a025-383cc62cf0b9"></div>
             </div>
-            <p id="no-info_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_e01ef755-d0c4-48b1-a025-383cc62cf0b9" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        text.node-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        text.type-indicator_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        text.collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             stroke: #797979;
             fill: none;
         }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.input_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #FF9AFF; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: rgb(235 235 235); }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.input_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #FF9AFF; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: rgb(235 235 235); }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.output_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #74e071; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.failed_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: rgb(224 15 15); }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.module_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #8BDEDB; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect.operation_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #FEBC5A; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.output_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #74e071; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.failed_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: rgb(224 15 15); }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.module_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #8BDEDB; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect.operation_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #FEBC5A; }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse.input_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #FF9AFF; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse.constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: rgb(235 235 235); }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse.output_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #74e071; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse.parameter_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: #B9CCF3; }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse.failed_e01f56e9-d2f8-40fd-aa7f-15f4933251fc { fill: rgb(224 15 15); }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse.input_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #FF9AFF; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse.constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: rgb(235 235 235); }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse.output_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #74e071; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse.parameter_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: #B9CCF3; }
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse.failed_e01ef755-d0c4-48b1-a025-383cc62cf0b9 { fill: rgb(224 15 15); }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .edgeLabelGroup_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             pointer-events: none;
         }
-        #arrowhead_e01f56e9-d2f8-40fd-aa7f-15f4933251fc path {
+        #arrowhead_e01ef755-d0c4-48b1-a025-383cc62cf0b9 path {
             fill: #333333;;
         }
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect,
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc ellipse {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect,
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc .type-indicator_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 .type-indicator_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.error_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9.error_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.error_e01f56e9-d2f8-40fd-aa7f-15f4933251fc > rect:first-of-type {
+        .boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9.error_e01ef755-d0c4-48b1-a025-383cc62cf0b9 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             height: 100%;
         }
         
-        .popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -340,7 +362,7 @@ with jax.set_mesh(mesh):
             flex-direction: column;
         }
 
-        .popup-header_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .popup-header_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: sticky;
             top: 0;
             background: white;
@@ -352,12 +374,12 @@ with jax.set_mesh(mesh):
             z-index: 1;
         }
 
-        .popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc h3 {
+        .popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .popup-content_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -365,87 +387,87 @@ with jax.set_mesh(mesh):
             flex-grow: 1;
         }
 
-        .popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc pre {
+        .popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .popup-close_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #popup-title_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: relative;
         }
 
-        #graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc pre {
+        #graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             pointer-events: none;
         }
-        .boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc text {
+        .boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             pointer-events: none;
         }
-        .boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc text {
+        .boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc text {
+        .edge-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc, .info-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9, .info-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover, .info-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        .collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover, .info-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc, .info-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9, .info-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .collapse-button-disabled_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        .collapse-button-disabled_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .collapse-icon-disabled_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -454,23 +476,23 @@ with jax.set_mesh(mesh):
         }
 
         /* Edge hover styles */
-        .edge-group_e01f56e9-d2f8-40fd-aa7f-15f4933251fc path {
+        .edge-group_e01ef755-d0c4-48b1-a025-383cc62cf0b9 path {
             pointer-events: stroke;
         }
 
-        .edge-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .edge-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             pointer-events: all;
         }
 
-        .edge-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.has-shape-details_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .edge-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9.has-shape-details_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc circle {
+        .edge-shape-info-badge_e01ef755-d0c4-48b1-a025-383cc62cf0b9 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc text {
+        .edge-shape-info-badge_e01ef755-d0c4-48b1-a025-383cc62cf0b9 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -512,50 +534,50 @@ with jax.set_mesh(mesh):
             }
         }
 
-        .highlight-cluster_e01f56e9-d2f8-40fd-aa7f-15f4933251fc > rect:first-of-type {
+        .highlight-cluster_e01ef755-d0c4-48b1-a025-383cc62cf0b9 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .highlight-node_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        text.node-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc .node-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9.constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9 .node-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             font-size: 0.7rem;
         }
 
-        .popup-content_e01f56e9-d2f8-40fd-aa7f-15f4933251fc summary {
+        .popup-content_e01ef755-d0c4-48b1-a025-383cc62cf0b9 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.input_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect,
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.output_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect,
-        .node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9.input_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect,
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9.output_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect,
+        .node_e01ef755-d0c4-48b1-a025-383cc62cf0b9.constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #png-error-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #png-error-message_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -566,13 +588,13 @@ with jax.set_mesh(mesh):
             text-align: left;
         }
 
-        #png-link-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #png-link-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #png-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -582,11 +604,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #png-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        #png-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #png-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -595,18 +617,18 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #png-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        #png-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #svg-link-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #svg-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -616,11 +638,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #svg-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        #svg-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        #svg-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -629,11 +651,11 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #svg-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc:hover {
+        #svg-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .custom-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -649,7 +671,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .custom-tooltip_smaller_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .custom-tooltip_smaller_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -665,7 +687,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -679,71 +701,71 @@ with jax.set_mesh(mesh):
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc table {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc th {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-dimension_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-dimension_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc svg {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc line {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc polygon {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc rect {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc td.shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc text {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 td.shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc tr.shape-connectors_e01f56e9-d2f8-40fd-aa7f-15f4933251fc th {
+        .shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9 tr.shape-connectors_e01ef755-d0c4-48b1-a025-383cc62cf0b9 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.implied-edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9.implied-edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_e01f56e9-d2f8-40fd-aa7f-15f4933251fc {
+        .logo_e01ef755-d0c4-48b1-a025-383cc62cf0b9 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_e01f56e9-d2f8-40fd-aa7f-15f4933251fc a {
+        .logo_e01ef755-d0c4-48b1-a025-383cc62cf0b9 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -904,20 +926,20 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 32)", "edge_data_id": 4720417344}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(32, 64)", "edge_data_id": 4720407872}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_3", "dims": "(64, 32)", "edge_data_id": 4720412288}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "relu_2", "dims": "(16, 64)", "edge_data_id": 4720418560}], "failed": false, "node_type": "Operation"}, "relu_2": {"edges": [{"target": "dot_general_3", "dims": "(16, 64)", "edge_data_id": 4720415296}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "output_0", "dims": "(16, 32)", "edge_data_id": 4719765376}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(16, 32)", "edge_data_id": 4706389952}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(32, 64)", "edge_data_id": 4706386240}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_4", "dims": "(64, 32)", "edge_data_id": 4522219840}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "sharding_constraint_2", "dims": "(16, 64)", "edge_data_id": 4706394112}], "failed": false, "node_type": "Operation"}, "sharding_constraint_2": {"edges": [{"target": "relu_3", "dims": "(16, 64)", "edge_data_id": 4706387968}], "failed": false, "node_type": "Operation"}, "relu_3": {"edges": [{"target": "dot_general_4", "dims": "(16, 64)", "edge_data_id": 4521484096}], "failed": false, "node_type": "Operation"}, "dot_general_4": {"edges": [{"target": "output_0", "dims": "(16, 32)", "edge_data_id": 4522223232}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
     const module_info = {"scope_MLP_dense0": {"type": "dense0", "parameters": {}, "attributes": {}}, "scope_MLP": {"type": "MLP", "parameters": {}, "attributes": {}}, "scope_MLP_dense1": {"type": "dense1", "parameters": {}, "attributes": {}}};
-    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [32, 64], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "relu_2": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}], "keyword_args": {"jvp_jaxpr_fun": "Wrapped function:\n\nCore: memoized\n", "num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_3": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}, {"_type": "tensor", "shape": [64, 32], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
-    const parent_module_to_nodes = {"scope_MLP_dense0": ["dot_general_1"], "scope_MLP": ["dot_general_1", "relu_2", "dot_general_3"], "scope_MLP_dense1": ["dot_general_3"]};
+    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [16, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [32, 64], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "sharding_constraint_2": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "relu_3": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}], "keyword_args": {"jvp_jaxpr_fun": "Wrapped function:\n\nCore: memoized\n", "num_consts": "0", "symbolic_zeros": "False"}}, "dot_general_4": {"positional_args": [{"_type": "tensor", "shape": [16, 64], "dtype": "float32"}, {"_type": "tensor", "shape": [64, 32], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
+    const parent_module_to_nodes = {"scope_MLP_dense0": ["dot_general_1"], "scope_MLP": ["dot_general_1", "sharding_constraint_2", "relu_3", "dot_general_4"], "scope_MLP_dense1": ["dot_general_4"]};
     const parent_module_to_depth = {"scope_MLP_dense0": 1, "scope_MLP": 2, "scope_MLP_dense1": 1};
-    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "relu_2": "relu", "scope_MLP_dense1": "dense1", "dot_general_3": "dot_general", "output_0": "output"};
-    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "relu_2": "relu", "scope_MLP_dense1": "dense1", "dot_general_3": "dot_general", "output_0": "output_0"};
+    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "sharding_constraint_2": "sharding_constraint", "relu_3": "relu", "scope_MLP_dense1": "dense1", "dot_general_4": "dot_general", "output_0": "output"};
+    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "scope_MLP_dense0": "dense0", "scope_MLP": "MLP", "dot_general_1": "dot_general", "sharding_constraint_2": "sharding_constraint", "relu_3": "relu", "scope_MLP_dense1": "dense1", "dot_general_4": "dot_general", "output_0": "output_0"};
     const node_to_attr_name = {};
-    const ancestor_map = {"param_0": "scope_MLP_dense0", "scope_MLP_dense0": "scope_MLP", "param_1": "scope_MLP_dense1", "scope_MLP_dense1": "scope_MLP", "dot_general_1": "scope_MLP_dense0", "relu_2": "scope_MLP", "dot_general_3": "scope_MLP_dense1"};
+    const ancestor_map = {"param_0": "scope_MLP_dense0", "scope_MLP_dense0": "scope_MLP", "param_1": "scope_MLP_dense1", "scope_MLP_dense1": "scope_MLP", "dot_general_1": "scope_MLP_dense0", "sharding_constraint_2": "scope_MLP", "relu_3": "scope_MLP", "dot_general_4": "scope_MLP_dense1"};
     const repeat_containers = new Set([]);
     const REPEAT_CONTAINER_COLOR = "#FA8334";
     const collapse_modules_after_depth = 2;
     const show_module_attr_names = false;
-    const node_to_module_path = {'dot_general_1': 'dot_general', 'relu_2': 'custom_jvp_call', 'dot_general_3': 'dot_general'};
+    const node_to_module_path = {'dot_general_1': 'dot_general', 'sharding_constraint_2': 'sharding_constraint', 'relu_3': 'custom_jvp_call', 'dot_general_4': 'dot_general'};
     const generateImage = false;
     const generateSvg = false;
     const show_modular_view = false;
@@ -954,10 +976,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc` : `custom-tooltip_smaller_e01f56e9-d2f8-40fd-aa7f-15f4933251fc`;
+        tooltip.className = !smaller ? `custom-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9` : `custom-tooltip_smaller_e01ef755-d0c4-48b1-a025-383cc62cf0b9`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc`);
+        const container = document.getElementById(`graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -969,7 +991,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -1004,7 +1026,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+            if (isDimension) cell.className = "shape-dimension_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
         };
 
         addCell(label ? "(" : "");
@@ -1068,7 +1090,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+        row.className = "shape-connectors_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1088,7 +1110,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_e01f56e9-d2f8-40fd-aa7f-15f4933251fc shape-connector_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+            cell.className = "shape-dimension_e01ef755-d0c4-48b1-a025-383cc62cf0b9 shape-connector_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1155,7 +1177,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+        const container = document.getElementById("graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
         const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
@@ -1183,14 +1205,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+        tooltip.className = "shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+        const container = document.getElementById("graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1810,7 +1832,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").html("");
+        d3.select("#graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1877,16 +1899,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").remove();
+        d3.select("#png-link-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node().parentNode;
+            const parent = d3.select("#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
-                .attr("id", "png-error-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+                .insert("div", "#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
+                .attr("id", "png-error-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                .attr("id", "png-error-message_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1924,21 +1946,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node().parentNode;
+        const parent = d3.select("#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
-            .attr("id", "png-link-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+            .insert("div", "#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
+            .attr("id", "png-link-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("id", "png-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.png`)
-            .attr("id", "png-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("download", `jaxviz_graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9.png`)
+            .attr("id", "png-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -1959,26 +1981,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node().parentNode;
+        const parent = d3.select("#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
-            .attr("id", "svg-link-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+            .insert("div", "#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
+            .attr("id", "svg-link-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("id", "svg-download-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc.svg`)
-            .attr("id", "svg-save-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("download", `jaxviz_graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9.svg`)
+            .attr("id", "svg-save-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        const svg = d3.select("#graph_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -1992,7 +2014,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_e01f56e9-d2f8-40fd-aa7f-15f4933251fc") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_e01ef755-d0c4-48b1-a025-383cc62cf0b9") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -2010,7 +2032,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        .attr("id", "arrowhead_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2022,11 +2044,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        const clusters = inner.selectAll(".boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+        .attr("class", "boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2036,10 +2058,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                group.classed("error_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                group.classed("repeat-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
             }
 
             // Parse bounding box coordinates
@@ -2081,13 +2103,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                .attr("class", "collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                .attr("class", "collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2104,7 +2126,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc, .collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        clusters.selectAll(".collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9, .collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2119,19 +2141,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        const edges = inner.selectAll(".edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+        .attr("class", "edge-group_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc implied-edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+                return "edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9 implied-edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
             }
-            return "edge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+            return "edge_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2157,7 +2179,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_e01f56e9-d2f8-40fd-aa7f-15f4933251fc)");
+        .attr("marker-end", "url(#arrowhead_e01ef755-d0c4-48b1-a025-383cc62cf0b9)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2183,10 +2205,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                labelGroup.classed("has-shape-details_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                .attr("class", "edge-shape-info-badge_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2222,7 +2244,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("class", "edge-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2234,7 +2256,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+            const labelGroup = edgeGroup.select(".edge-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2275,19 +2297,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        const nodes = inner.selectAll(".node_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+                let classes = "node_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2315,12 +2337,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    return "operation_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    return "operation_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
                 });
             } else {
                 // Create rectangle
@@ -2330,15 +2352,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" : "operation_e01f56e9-d2f8-40fd-aa7f-15f4933251fc";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_e01ef755-d0c4-48b1-a025-383cc62cf0b9" : "operation_e01ef755-d0c4-48b1-a025-383cc62cf0b9";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        .attr("class", "node-label_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2347,7 +2369,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        .attr("class", "type-indicator_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2365,7 +2387,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        inner.selectAll(".node_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2376,14 +2398,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        .attr("class", "info-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        .attr("class", "info-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2399,16 +2421,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc, .info-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            nodeGroup.selectAll(".info-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9, .info-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node();
+                const infoButton = nodeGroup.select(".info-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+        inner.selectAll(".node_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2430,7 +2452,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" : "collapse-button-disabled_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("class", isExpandable ? "collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9" : "collapse-button-disabled_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2439,7 +2461,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc" : "collapse-icon-disabled_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+            .attr("class", isExpandable ? "collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9" : "collapse-icon-disabled_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2459,7 +2481,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_e01f56e9-d2f8-40fd-aa7f-15f4933251fc, .collapse-icon_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                nodeGroup.selectAll(".collapse-button_e01ef755-d0c4-48b1-a025-383cc62cf0b9, .collapse-icon_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2560,16 +2582,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+            clickedNodeElement.classed("highlight-node_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", false);
+                clickedNodeElement.classed("highlight-node_e01ef755-d0c4-48b1-a025-383cc62cf0b9", false);
             }, 2000);
 
-            const popup = d3.select("#popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
-            const moduleTemplate = d3.select("#module-template_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
-            const tensorOpTemplate = d3.select("#tensor-op-template_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
-            const noInfoMessage = d3.select("#no-info_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+            const popup = d3.select("#popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
+            const moduleTemplate = d3.select("#module-template_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
+            const tensorOpTemplate = d3.select("#tensor-op-template_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
+            const noInfoMessage = d3.select("#no-info_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
             
             const nodeData = adj_list[nodeName];
             
@@ -2577,14 +2599,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").text(popupTitle);
+            d3.select("#popup-title_e01ef755-d0c4-48b1-a025-383cc62cf0b9").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_e01f56e9-d2f8-40fd-aa7f-15f4933251fc");
+            const attrNameRow = d3.select("#attr-name-row_e01ef755-d0c4-48b1-a025-383cc62cf0b9");
 
             if (attrName) {
-                d3.select("#attr-name-value_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").text(attrName);
+                d3.select("#attr-name-value_e01ef755-d0c4-48b1-a025-383cc62cf0b9").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2596,31 +2618,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                moduleTemplate.style("display", "block").classed("content-shown_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
                 
-                d3.select("#module-extra-repr_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_e01ef755-d0c4-48b1-a025-383cc62cf0b9").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node();
+                const attributesContainer = d3.select("#module-attributes_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node();
+                const parametersContainer = d3.select("#module-parameters_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                noInfoMessage.style("display", "block").classed("content-shown_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2636,19 +2658,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").node().scrollTop = 0;
+            d3.select("#popup-content_e01ef755-d0c4-48b1-a025-383cc62cf0b9").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").style("display", "none");
+            d3.select("#popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9").style("display", "none");
         }
         
-        d3.select(".popup-close_e01f56e9-d2f8-40fd-aa7f-15f4933251fc").on("click", closePopup);
+        d3.select(".popup-close_e01ef755-d0c4-48b1-a025-383cc62cf0b9").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_e01f56e9-d2f8-40fd-aa7f-15f4933251fc`);
+        const popup = document.getElementById(`popup_e01ef755-d0c4-48b1-a025-383cc62cf0b9`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_e01f56e9-d2f8-40fd-aa7f-15f4933251fc');
+            const editorContainers = popup.querySelectorAll('.json-viewer_e01ef755-d0c4-48b1-a025-383cc62cf0b9');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2727,30 +2749,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                    const targetElement = inner.selectAll(".node_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                        targetElement.classed("highlight-node_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", false);
+                            targetElement.classed("highlight-node_e01ef755-d0c4-48b1-a025-383cc62cf0b9", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_e01f56e9-d2f8-40fd-aa7f-15f4933251fc")
+                    const targetElement = inner.selectAll(".boundary-box_e01ef755-d0c4-48b1-a025-383cc62cf0b9")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", true);
+                        targetElement.classed("highlight-cluster_e01ef755-d0c4-48b1-a025-383cc62cf0b9", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_e01f56e9-d2f8-40fd-aa7f-15f4933251fc", false);
+                            targetElement.classed("highlight-cluster_e01ef755-d0c4-48b1-a025-383cc62cf0b9", false);
                         }, 2000); // Match the animation duration
                     }
                 }

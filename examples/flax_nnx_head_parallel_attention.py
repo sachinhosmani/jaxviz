@@ -8,13 +8,22 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
+# This tutorial intentionally simulates an eight-device CPU system.
+try:
+    jax.config.update("jax_num_cpu_devices", 8)
+except RuntimeError:
+    pass
+cpu_devices = jax.devices("cpu")
+if len(cpu_devices) < 8:
+    raise RuntimeError("Restart Python and run this example before any JAX operation.")
+
 Auto = jax.sharding.AxisType.Auto
 mesh = jax.make_mesh(
     (2, 4),
     ("data", "model"),
     axis_types=(Auto, Auto),
+    devices=cpu_devices,
 )
-nnx.use_eager_sharding(True)
 
 
 @jax.jit
@@ -69,21 +78,41 @@ class HeadParallelAttention(nnx.Module):
         return x.transpose(0, 2, 1, 3)
 
     def __call__(self, x):
-        query = self.split_heads(self.query(x))
-        key = self.split_heads(self.key(x))
-        value = self.split_heads(self.value(x))
+        projection_sharding = jax.P("data", None, "model")
+        head_sharding = jax.P("data", "model", None, None)
+
+        query = jax.lax.with_sharding_constraint(self.query(x), projection_sharding)
+        key = jax.lax.with_sharding_constraint(self.key(x), projection_sharding)
+        value = jax.lax.with_sharding_constraint(self.value(x), projection_sharding)
+
+        query = jax.lax.with_sharding_constraint(self.split_heads(query), head_sharding)
+        key = jax.lax.with_sharding_constraint(self.split_heads(key), head_sharding)
+        value = jax.lax.with_sharding_constraint(self.split_heads(value), head_sharding)
 
         probabilities = attention_weights(query, key)
+        probabilities = jax.lax.with_sharding_constraint(probabilities, head_sharding)
         context = jnp.einsum("bhst,bhtd->bhsd", probabilities, value)
+        context = jax.lax.with_sharding_constraint(context, head_sharding)
 
         context = context.transpose(0, 2, 1, 3)
         context = context.reshape(x.shape)
+        context = jax.lax.with_sharding_constraint(context, projection_sharding)
         # Expand this module in the per-device graph to see its all-reduce.
         return self.output(context)
 
 
-with jax.set_mesh(mesh):
+@nnx.jit
+def create_sharded_model():
     model = HeadParallelAttention(nnx.Rngs(0))
+    state = nnx.state(model)
+    partition_specs = nnx.get_partition_spec(state)
+    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
+    nnx.update(model, sharded_state)
+    return model
+
+
+with jax.set_mesh(mesh):
+    model = create_sharded_model()
     # Global (8, 32, 128) becomes local (4, 32, 128) across data replicas.
     example_input = jax.device_put(
         jnp.ones((8, 32, 128)),
