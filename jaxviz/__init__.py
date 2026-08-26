@@ -63,14 +63,41 @@ def _lower_for_hlo(fn, example_args):
     return jax.jit(fn).lower(*example_args)
 
 
+def _global_jaxpr_for_hlo(fn, example_args):
+    """Trace the unpartitioned program for partitioner-independent shape data."""
+    try:
+        from flax import nnx
+    except ImportError:
+        nnx = None
+
+    if nnx is not None and isinstance(fn, nnx.Module):
+        graphdef, state = nnx.split(fn)
+
+        def forward(state, *args):
+            return nnx.merge(graphdef, state)(*args)
+
+        return jax.make_jaxpr(forward)(state, *example_args)
+
+    return jax.make_jaxpr(fn)(*example_args)
+
+
 def _active_mesh_shape():
     get_mesh = getattr(jax.sharding, "get_mesh", None)
-    if get_mesh is None:
-        return None
-    try:
-        return dict(get_mesh().shape)
-    except (AttributeError, RuntimeError):
-        return None
+    if get_mesh is not None:
+        try:
+            return dict(get_mesh().shape)
+        except (AttributeError, RuntimeError):
+            pass
+
+    get_abstract_mesh = getattr(jax.sharding, "get_abstract_mesh", None)
+    if get_abstract_mesh is not None:
+        try:
+            shape = dict(get_abstract_mesh().shape)
+            return shape or None
+        except (AttributeError, RuntimeError):
+            pass
+
+    return None
 
 
 def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_depth=1,
@@ -106,8 +133,13 @@ def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_dept
         export_format = validate_export_format(export_format)
 
     if view == VIEW_PER_DEVICE:
+        global_jaxpr = _global_jaxpr_for_hlo(fn, example_args)
         lowered = _lower_for_hlo(fn, example_args)
-        blobs = build_hlo_graph(lowered, mesh_shape=_active_mesh_shape())
+        blobs = build_hlo_graph(
+            lowered,
+            mesh_shape=_active_mesh_shape(),
+            global_jaxpr=global_jaxpr,
+        )
     else:
         with _module_scope_context(fn):
             closed_jaxpr = jax.make_jaxpr(fn)(*example_args)

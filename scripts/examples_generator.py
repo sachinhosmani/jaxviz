@@ -211,6 +211,14 @@ def generate_example(path, selected_views=None):
 
 
 def generate_all(example_names=None, selected_views=None):
+    import jax
+
+    if "jax_num_cpu_devices" in jax.config.values:
+        try:
+            jax.config.update("jax_num_cpu_devices", 8)
+        except RuntimeError:
+            pass
+
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     requested_names = set(example_names or ())
     available_paths = {

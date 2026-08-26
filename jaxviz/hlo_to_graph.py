@@ -2,7 +2,9 @@
 
 Under Auto/school-1 sharding the collectives don't exist in the jaxpr — XLA inserts
 them while partitioning. We dump HLO after the SPMD partitioner (before fusion) and
-select the module by content (earliest dump containing a collective).
+select the module by content (earliest dump containing a collective). Logical shapes
+come from the propagated HLO when available, with a conservative global-jaxpr
+fallback for Shardy versions that do not emit that HLO stage.
 
 Attribution uses ONLY first-party metadata:
   * op_name scopes (e.g. jit(forward)/jit(relu)/max  ->  label "relu")
@@ -156,6 +158,76 @@ def _shape_info(local_dims, global_dims, mesh_shape=None):
         "axes": _partition_axes(partitions, mesh_shape),
         "status": "verified",
     }
+
+
+def _jaxpr_global_shape_index(closed_jaxpr):
+    """Map user source lines to logical output shapes from an unpartitioned jaxpr."""
+    index = defaultdict(set)
+    seen = set()
+
+    def nested_jaxprs(value):
+        if hasattr(value, "jaxpr") and hasattr(value.jaxpr, "eqns"):
+            yield value.jaxpr
+        elif hasattr(value, "eqns"):
+            yield value
+        elif isinstance(value, dict):
+            for child in value.values():
+                yield from nested_jaxprs(child)
+        elif isinstance(value, (tuple, list)):
+            for child in value:
+                yield from nested_jaxprs(child)
+
+    def visit(jaxpr):
+        if id(jaxpr) in seen:
+            return
+        seen.add(id(jaxpr))
+        for equation in jaxpr.eqns:
+            source_info = getattr(equation, "source_info", None)
+            traceback = getattr(source_info, "traceback", None)
+            frames = getattr(traceback, "frames", ())
+            location = None
+            for frame in frames:
+                file_name = getattr(frame, "file_name", "")
+                line_num = getattr(frame, "line_num", None)
+                if not file_name or line_num is None:
+                    continue
+                if file_name.startswith("<") or "site-packages" in file_name \
+                        or "dist-packages" in file_name:
+                    continue
+                location = (file_name, int(line_num))
+                break
+            if location is not None:
+                for variable in equation.outvars:
+                    shape = getattr(getattr(variable, "aval", None), "shape", None)
+                    if shape is None:
+                        continue
+                    try:
+                        index[location].add(tuple(int(dimension) for dimension in shape))
+                    except (TypeError, ValueError):
+                        continue
+            for value in equation.params.values():
+                for nested in nested_jaxprs(value):
+                    visit(nested)
+
+    root = getattr(closed_jaxpr, "jaxpr", closed_jaxpr)
+    visit(root)
+    return index
+
+
+def _fallback_global_shape(local_dims, candidates, mesh_shape):
+    """Accept one jaxpr shape only when it uniquely explains the local shape."""
+    verified = set()
+    for candidate in candidates:
+        info = _shape_info(local_dims, candidate, mesh_shape)
+        if info["status"] != "verified":
+            continue
+        if any(partition > 1 for partition in info["partitions"]) \
+                and info["axes"] is None:
+            continue
+        verified.add(tuple(candidate))
+    if len(verified) == 1:
+        return list(next(iter(verified)))
+    return None
 
 
 def _sharding_tiling(sharding):
@@ -531,9 +603,16 @@ def _module_path_from_frames(frames, src, user_files):
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
-def build_hlo_graph(lowered, mesh_shape=None):
+def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
     text, propagated = _dump_hlo_stages(lowered)
     global_index = _build_global_index(propagated)
+    jaxpr_global_index = _jaxpr_global_shape_index(global_jaxpr) \
+        if global_jaxpr is not None else {}
+    jaxpr_global_candidates = {
+        shape
+        for shapes in jaxpr_global_index.values()
+        for shape in shapes
+    }
     out_global = _propagated_output(propagated)
     sfi = _StackFrameIndex(text)
     src = _SourceResolver()
@@ -668,12 +747,14 @@ def build_hlo_graph(lowered, mesh_shape=None):
         # first-party metadata; anything unresolved is simply omitted.
         sub_path = []
         node_loc = None
+        node_source = None
         if sid_m := _STACK_ID_RE.search(ln):
             frames = sfi.resolve(int(sid_m.group(1)))
             sub_path = _module_path_from_frames(frames, src, user_files)
             for f, fn, l, c in frames:
                 if f in user_files:
                     node_loc = (l, c)
+                    node_source = (f, l)
                     break
 
         # Global shape from the post-propagation stage, joined by (line, col, opcode)
@@ -688,6 +769,26 @@ def build_hlo_graph(lowered, mesh_shape=None):
                     verified.add(tuple(gdims))
             if len(verified) == 1:
                 node_global[node_id] = list(next(iter(verified)))
+
+        if node_id not in node_global and node_source is not None:
+            _, local_dims = _hlo_shape_parts(shape)
+            fallback = _fallback_global_shape(
+                local_dims,
+                jaxpr_global_index.get(node_source, ()),
+                mesh_shape,
+            )
+            if fallback is not None:
+                node_global[node_id] = fallback
+
+        if node_id not in node_global:
+            _, local_dims = _hlo_shape_parts(shape)
+            fallback = _fallback_global_shape(
+                local_dims,
+                jaxpr_global_candidates,
+                mesh_shape,
+            )
+            if fallback is not None:
+                node_global[node_id] = fallback
 
         scope_path = _opname_scopes(op_name, wrapper)
         node_modpath[node_id] = root_prefix + sub_path + scope_path
