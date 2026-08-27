@@ -155,122 +155,53 @@
                 </div>
                 <div class="code-scroll">
                     <pre><code class="language-python" id="example-code">import jax
-import jax.numpy as jnp
-from flax import nnx
 from jaxviz import trace_model
 
 
-# This tutorial intentionally simulates an eight-device CPU system.
-try:
-    jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
-except RuntimeError:
-    pass
-cpu_devices = jax.devices(&quot;cpu&quot;)
-if len(cpu_devices) &lt; 8:
-    raise RuntimeError(&quot;Restart Python and run this example before any JAX operation.&quot;)
+# Simulate eight devices so the example runs on a CPU-only machine.
+jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
+
+import jax.numpy as jnp
+from flax import nnx
+
 
 Auto = jax.sharding.AxisType.Auto
 mesh = jax.make_mesh(
     (2, 4),
     (&quot;data&quot;, &quot;model&quot;),
     axis_types=(Auto, Auto),
-    devices=cpu_devices,
+    devices=jax.devices(&quot;cpu&quot;),
 )
-
-
-@jax.jit
-def attention_weights(query, key):
-    scale = jnp.sqrt(jnp.asarray(query.shape[-1], dtype=query.dtype))
-    scores = jnp.einsum(&quot;bhsd,bhtd-&gt;bhst&quot;, query, key) / scale
-    return jax.nn.softmax(scores, axis=-1)
 
 
 class HeadParallelAttention(nnx.Module):
     def __init__(self, rngs):
-        self.num_heads = 8
-        self.head_dim = 16
-        embedding_dim = self.num_heads * self.head_dim
-        init = nnx.initializers.lecun_normal()
-
-        # Column-parallel projections assign complete heads to model shards.
-        projection = nnx.with_partitioning(init, (None, &quot;model&quot;))
-        self.query = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
+        self.attention = nnx.MultiHeadAttention(
+            num_heads=8,
+            in_features=128,
             use_bias=False,
+            decode=False,
+            kernel_metadata={&quot;out_sharding&quot;: (None, &quot;model&quot;, None)},
+            out_kernel_metadata={&quot;out_sharding&quot;: (&quot;model&quot;, None, None)},
             rngs=rngs,
-            kernel_init=projection,
         )
-        self.key = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=projection,
-        )
-        self.value = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=projection,
-        )
-        # The row-parallel output projection combines the head shards.
-        self.output = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),
-        )
-
-    def split_heads(self, x):
-        batch, sequence, _ = x.shape
-        x = x.reshape(batch, sequence, self.num_heads, self.head_dim)
-        return x.transpose(0, 2, 1, 3)
 
     def __call__(self, x):
-        projection_sharding = jax.P(&quot;data&quot;, None, &quot;model&quot;)
-        head_sharding = jax.P(&quot;data&quot;, &quot;model&quot;, None, None)
-
-        query = jax.lax.with_sharding_constraint(self.query(x), projection_sharding)
-        key = jax.lax.with_sharding_constraint(self.key(x), projection_sharding)
-        value = jax.lax.with_sharding_constraint(self.value(x), projection_sharding)
-
-        query = jax.lax.with_sharding_constraint(self.split_heads(query), head_sharding)
-        key = jax.lax.with_sharding_constraint(self.split_heads(key), head_sharding)
-        value = jax.lax.with_sharding_constraint(self.split_heads(value), head_sharding)
-
-        probabilities = attention_weights(query, key)
-        probabilities = jax.lax.with_sharding_constraint(probabilities, head_sharding)
-        context = jnp.einsum(&quot;bhst,bhtd-&gt;bhsd&quot;, probabilities, value)
-        context = jax.lax.with_sharding_constraint(context, head_sharding)
-
-        context = context.transpose(0, 2, 1, 3)
-        context = context.reshape(x.shape)
-        context = jax.lax.with_sharding_constraint(context, projection_sharding)
-        # Expand this module in the per-device graph to see its all-reduce.
-        return self.output(context)
+        return self.attention(x)
 
 
-@nnx.jit
-def create_sharded_model():
-    model = HeadParallelAttention(nnx.Rngs(0))
-    state = nnx.state(model)
-    partition_specs = nnx.get_partition_spec(state)
-    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
-    nnx.update(model, sharded_state)
-    return model
+@jax.jit
+def create_model():
+    return HeadParallelAttention(nnx.Rngs(0))
 
 
 with jax.set_mesh(mesh):
-    model = create_sharded_model()
-    # Global (8, 32, 128) becomes local (4, 32, 128) across data replicas.
+    model = create_model()
     example_input = jax.device_put(
         jnp.ones((8, 32, 128)),
         jax.P(&quot;data&quot;, None, None),
     )
-    trace_model(model, example_input, view=&#x27;per_device&#x27;, collapse_modules_after_depth=1)
+    trace_model(model, example_input, view=&#x27;per_device&#x27;, collapse_modules_after_depth=2)
 </code></pre>
                 </div>
             </section>
@@ -278,124 +209,124 @@ with jax.set_mesh(mesh):
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
-    <div id="graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
-    <div class="logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+                <div class="graph-stage"><div id="graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
+    <div id="graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76"></div>
+    <div class="logo_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display: none;">
-        <div class="popup-header_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
-            <h3 id="popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></h3>
-            <span class="popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">✕</span>
+    <div id="popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" class="popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="display: none;">
+        <div class="popup-header_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
+            <h3 id="popup-title_ddf6f35d-2350-4bcf-8b5a-0be436dadf76"></h3>
+            <span class="popup-close_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">✕</span>
         </div>
-        <div id="popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
-            <div id="common-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
-                <p id="attr-name-row_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" class="popup-content_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
+            <div id="common-info_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
+                <p id="attr-name-row_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
-                <details open id="module-parameters-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+            <div id="module-template_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="display:none;">
+                <details open id="module-parameters-details_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
+                    <div id="module-parameters_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" class="json-viewer_ddf6f35d-2350-4bcf-8b5a-0be436dadf76"></div>
                 </details>
-                <details open id="module-attributes-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c">
+                <details open id="module-attributes-details_ddf6f35d-2350-4bcf-8b5a-0be436dadf76">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
+                    <div id="module-attributes_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" class="json-viewer_ddf6f35d-2350-4bcf-8b5a-0be436dadf76"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">
+            <div id="tensor-op-template_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" class="json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c"></div>
+                <div id="tensor-op-parameters_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" class="json-viewer_ddf6f35d-2350-4bcf-8b5a-0be436dadf76"></div>
             </div>
-            <p id="no-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        text.node-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        text.type-indicator_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        text.collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             stroke: #797979;
             fill: none;
         }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FF9AFF; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(235 235 235); }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.input_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #FF9AFF; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: rgb(235 235 235); }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #74e071; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(224 15 15); }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #8BDEDB; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect.operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FEBC5A; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.output_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #74e071; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.failed_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: rgb(224 15 15); }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.module_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #8BDEDB; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect.operation_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #FEBC5A; }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #FF9AFF; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(235 235 235); }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #74e071; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.parameter_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: #B9CCF3; }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse.failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c { fill: rgb(224 15 15); }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse.input_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #FF9AFF; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse.constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: rgb(235 235 235); }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse.output_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #74e071; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse.parameter_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: #B9CCF3; }
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse.failed_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 { fill: rgb(224 15 15); }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .edgeLabelGroup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             pointer-events: none;
         }
-        #arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c path {
+        #arrowhead_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 path {
             fill: #333333;;
         }
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c ellipse {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect,
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c .type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 .type-indicator_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.error_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c > rect:first-of-type {
+        .boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.error_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             height: 100%;
         }
         
-        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -410,7 +341,7 @@ with jax.set_mesh(mesh):
             flex-direction: column;
         }
 
-        .popup-header_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .popup-header_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: sticky;
             top: 0;
             background: white;
@@ -422,12 +353,12 @@ with jax.set_mesh(mesh):
             z-index: 1;
         }
 
-        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c h3 {
+        .popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .popup-content_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -435,87 +366,87 @@ with jax.set_mesh(mesh):
             flex-grow: 1;
         }
 
-        .popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c pre {
+        .popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .popup-close_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #popup-title_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: relative;
         }
 
-        #graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c pre {
+        #graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             pointer-events: none;
         }
-        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
+        .boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             pointer-events: none;
         }
-        .boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
+        .boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
+        .edge-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76, .info-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover, .info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        .collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover, .info-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76, .info-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .collapse-button-disabled_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        .collapse-button-disabled_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .collapse-icon-disabled_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -524,23 +455,23 @@ with jax.set_mesh(mesh):
         }
 
         /* Edge hover styles */
-        .edge-group_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c path {
+        .edge-group_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 path {
             pointer-events: stroke;
         }
 
-        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .edge-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             pointer-events: all;
         }
 
-        .edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.has-shape-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .edge-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.has-shape-details_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             cursor: help;
         }
 
-        .edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c circle {
+        .edge-shape-info-badge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
+        .edge-shape-info-badge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -582,50 +513,50 @@ with jax.set_mesh(mesh):
             }
         }
 
-        .highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c > rect:first-of-type {
+        .highlight-cluster_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .highlight-node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        text.node-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c .node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 .node-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             font-size: 0.7rem;
         }
 
-        .popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c summary {
+        .popup-content_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect,
-        .node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.input_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect,
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.output_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect,
+        .node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #png-error-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #png-error-message_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -636,13 +567,13 @@ with jax.set_mesh(mesh):
             text-align: left;
         }
 
-        #png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #png-link-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #png-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -652,11 +583,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        #png-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #png-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -665,18 +596,18 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        #png-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #svg-link-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #svg-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -686,11 +617,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        #svg-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        #svg-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -699,11 +630,11 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c:hover {
+        #svg-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .custom-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -719,7 +650,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .custom-tooltip_smaller_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .custom-tooltip_smaller_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -735,7 +666,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -749,71 +680,71 @@ with jax.set_mesh(mesh):
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c table {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c th {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-dimension_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c svg {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c line {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c polygon {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c rect {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c td.shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c text {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 td.shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c tr.shape-connectors_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c th {
+        .shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 tr.shape-connectors_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.implied-edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.implied-edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             stroke-dasharray: 5,5;
         }
 
-        .logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c {
+        .logo_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c a {
+        .logo_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -974,20 +905,20 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"param_2": {"edges": [{"target": "dot_1", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_2->dot_1"}], "failed": false, "node_type": "Parameter"}, "param_4": {"edges": [{"target": "dot_5", "dims": "(32, 128)", "shape_info": {"global": [128, 128], "local": [32, 128], "partitions": [4, 1], "axes": [[{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "param_4->dot_5"}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_1->dot"}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "dot_3", "dims": "(128, 32)", "shape_info": {"global": [128, 128], "local": [128, 32], "partitions": [1, 4], "axes": [[], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "param_3->dot_3"}], "failed": false, "node_type": "Parameter"}, "param": {"edges": [{"target": "dot", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot"}, {"target": "dot_1", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_1"}, {"target": "dot_3", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_3"}], "failed": false, "node_type": "Input"}, "dot": {"edges": [{"target": "sharding_constraint_18", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot->sharding_constraint_18"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_18": {"edges": [{"target": "reshape_9", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_18->reshape_9"}], "failed": false, "node_type": "Operation"}, "reshape_9": {"edges": [{"target": "transpose_8", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_9->transpose_8"}], "failed": false, "node_type": "Operation"}, "transpose_8": {"edges": [{"target": "sharding_constraint_19", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_8->sharding_constraint_19"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_19": {"edges": [{"target": "dot_2", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_19->dot_2"}], "failed": false, "node_type": "Operation"}, "dot_1": {"edges": [{"target": "sharding_constraint_20", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot_1->sharding_constraint_20"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_20": {"edges": [{"target": "reshape_11", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_20->reshape_11"}], "failed": false, "node_type": "Operation"}, "reshape_11": {"edges": [{"target": "transpose_9", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_11->transpose_9"}], "failed": false, "node_type": "Operation"}, "transpose_9": {"edges": [{"target": "sharding_constraint_21", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_9->sharding_constraint_21"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_21": {"edges": [{"target": "dot_2", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_21->dot_2"}], "failed": false, "node_type": "Operation"}, "dot_2": {"edges": [{"target": "div_19", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "dot_2->div_19"}], "failed": false, "node_type": "Operation"}, "constant_13": {"edges": [{"target": "div_18", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_13->div_18"}], "failed": false, "node_type": "Constant"}, "div_18": {"edges": [{"target": "div_19", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_18->div_19"}], "failed": false, "node_type": "Operation"}, "div_19": {"edges": [{"target": "reduce", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_19->reduce"}, {"target": "sub_15", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_19->sub_15"}], "failed": false, "node_type": "Operation"}, "constant_14": {"edges": [{"target": "reduce", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_14->reduce"}, {"target": "max_6", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_14->max_6"}], "failed": false, "node_type": "Constant"}, "reduce": {"edges": [{"target": "max_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reduce->max_7"}], "failed": false, "node_type": "Operation"}, "max_6": {"edges": [{"target": "max_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "max_6->max_7"}], "failed": false, "node_type": "Operation"}, "max_7": {"edges": [{"target": "broadcast_in_dim_6", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "max_7->broadcast_in_dim_6"}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_6": {"edges": [{"target": "sub_12", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "broadcast_in_dim_6->sub_12"}], "failed": false, "node_type": "Operation"}, "sub_12": {"edges": [{"target": "sub_13", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_12->sub_13"}], "failed": false, "node_type": "Operation"}, "sub_13": {"edges": [{"target": "sub_14", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "sub_13->sub_14"}], "failed": false, "node_type": "Operation"}, "sub_14": {"edges": [{"target": "sub_15", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_14->sub_15"}], "failed": false, "node_type": "Operation"}, "sub_15": {"edges": [{"target": "exp_3", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_15->exp_3"}], "failed": false, "node_type": "Operation"}, "exp_3": {"edges": [{"target": "reduce_1", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_3->reduce_1"}, {"target": "div_23", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_3->div_23"}], "failed": false, "node_type": "Operation"}, "constant_15": {"edges": [{"target": "reduce_1", "dims": "( )", "shape_info": {"global": [], "local": [], "partitions": [], "axes": [], "status": "verified"}, "edge_data_id": "constant_15->reduce_1"}], "failed": false, "node_type": "Constant"}, "reduce_1": {"edges": [{"target": "broadcast_in_dim_7", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reduce_1->broadcast_in_dim_7"}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_7": {"edges": [{"target": "div_20", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "broadcast_in_dim_7->div_20"}], "failed": false, "node_type": "Operation"}, "div_20": {"edges": [{"target": "div_21", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_20->div_21"}], "failed": false, "node_type": "Operation"}, "div_21": {"edges": [{"target": "div_22", "dims": "(4, 2, 32)", "shape_info": {"global": [8, 8, 32], "local": [4, 2, 32], "partitions": [2, 4, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "div_21->div_22"}], "failed": false, "node_type": "Operation"}, "div_22": {"edges": [{"target": "div_23", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_22->div_23"}], "failed": false, "node_type": "Operation"}, "div_23": {"edges": [{"target": "sharding_constraint_22", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_23->sharding_constraint_22"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_22": {"edges": [{"target": "dot_4", "dims": "(4, 2, 32, 32)", "shape_info": {"global": [8, 8, 32, 32], "local": [4, 2, 32, 32], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_22->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_3": {"edges": [{"target": "sharding_constraint_23", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "dot_3->sharding_constraint_23"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_23": {"edges": [{"target": "reshape_13", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_23->reshape_13"}], "failed": false, "node_type": "Operation"}, "reshape_13": {"edges": [{"target": "transpose_10", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_13->transpose_10"}], "failed": false, "node_type": "Operation"}, "transpose_10": {"edges": [{"target": "sharding_constraint_24", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_10->sharding_constraint_24"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_24": {"edges": [{"target": "dot_4", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_24->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_4": {"edges": [{"target": "sharding_constraint_25", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "dot_4->sharding_constraint_25"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_25": {"edges": [{"target": "transpose_11", "dims": "(4, 2, 32, 16)", "shape_info": {"global": [8, 8, 32, 16], "local": [4, 2, 32, 16], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sharding_constraint_25->transpose_11"}], "failed": false, "node_type": "Operation"}, "transpose_11": {"edges": [{"target": "reshape_14", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "transpose_11->reshape_14"}], "failed": false, "node_type": "Operation"}, "reshape_14": {"edges": [{"target": "sharding_constraint_26", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "reshape_14->sharding_constraint_26"}], "failed": false, "node_type": "Operation"}, "sharding_constraint_26": {"edges": [{"target": "dot_5", "dims": "(4, 32, 32)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 32], "partitions": [2, 1, 4], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}]], "status": "verified"}, "edge_data_id": "sharding_constraint_26->dot_5"}], "failed": false, "node_type": "Operation"}, "dot_5": {"edges": [{"target": "all_reduce", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "dot_5->all_reduce"}], "failed": false, "node_type": "Operation"}, "all_reduce": {"edges": [{"target": "output_0", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "all_reduce->output_0"}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
-    const module_info = {"mod_query": {"name": "query", "path": "query", "depth": 0}, "mod_attention_weights": {"name": "attention_weights", "path": "attention_weights", "depth": 0}, "mod_value": {"name": "value", "path": "value", "depth": 0}, "mod_output": {"name": "output", "path": "output", "depth": 0}, "mod_key": {"name": "key", "path": "key", "depth": 0}};
-    const func_info = {"param_2": {"positional_args": [], "keyword_args": {}}, "param_4": {"positional_args": [], "keyword_args": {}}, "param_1": {"positional_args": [], "keyword_args": {}}, "param_3": {"positional_args": [], "keyword_args": {}}, "param": {"positional_args": [], "keyword_args": {}}, "dot": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_18": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_9": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_8": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_19": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_1": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_20": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_11": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_9": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_21": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_2": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,1}", "lhs_contracting_dims": "{3}", "rhs_batch_dims": "{0,1}", "rhs_contracting_dims": "{3}"}}, "constant_13": {"positional_args": [], "keyword_args": {}}, "div_18": {"positional_args": [4.0], "keyword_args": {"dimensions": "{}"}}, "div_19": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_14": {"positional_args": [], "keyword_args": {}}, "reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, -Infinity], "keyword_args": {"dimensions": "{3}", "to_apply": "%region_0.0"}}, "max_6": {"positional_args": [-Infinity], "keyword_args": {"dimensions": "{}"}}, "max_7": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "broadcast_in_dim_6": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "sub_12": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "sub_13": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "sub_14": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2}"}}, "sub_15": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "exp_3": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_15": {"positional_args": [], "keyword_args": {}}, "reduce_1": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, 0.0], "keyword_args": {"dimensions": "{3}", "to_apply": "%region_1.0"}}, "broadcast_in_dim_7": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "div_20": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "div_21": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "div_22": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2}"}}, "div_23": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "sharding_constraint_22": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "dot_3": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 32], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "sharding_constraint_23": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "reshape_13": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_10": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "sharding_constraint_24": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_4": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,1}", "lhs_contracting_dims": "{3}", "rhs_batch_dims": "{0,1}", "rhs_contracting_dims": "{2}"}}, "sharding_constraint_25": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {}}, "transpose_11": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 16], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,2,1,3}"}}, "reshape_14": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {}}, "sharding_constraint_26": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "dot_5": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [32, 128], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "all_reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}], "keyword_args": {"channel_id": "1", "replica_groups": "[2,4]<=[8]", "use_global_device_ids": "true", "to_apply": "%add.clone"}}};
-    const parent_module_to_nodes = {"mod_key": ["param_2"], "mod_output": ["param_4"], "mod_query": ["param_1"], "mod_value": ["param_3"], "mod_attention_weights": ["dot_2", "div_18", "div_19", "reduce", "max_6", "max_7", "broadcast_in_dim_6", "sub_12", "sub_13", "sub_14", "sub_15", "exp_3", "reduce_1", "broadcast_in_dim_7", "div_20", "div_21", "div_22", "div_23"]};
-    const parent_module_to_depth = {"mod_query": 0, "mod_attention_weights": 0, "mod_value": 0, "mod_output": 0, "mod_key": 0};
-    const graph_node_name_to_without_suffix = {"param_2": "param", "param_4": "param", "param_1": "param", "param_3": "param", "param": "input", "dot": "dot", "sharding_constraint_18": "copy", "reshape_9": "reshape", "transpose_8": "transpose", "sharding_constraint_19": "copy", "dot_1": "dot", "sharding_constraint_20": "copy", "reshape_11": "reshape", "transpose_9": "transpose", "sharding_constraint_21": "copy", "dot_2": "dot", "constant_13": "constant", "div_18": "broadcast", "div_19": "divide", "constant_14": "constant", "reduce": "reduce", "max_6": "broadcast", "max_7": "maximum", "broadcast_in_dim_6": "reshape", "sub_12": "broadcast", "sub_13": "reshape", "sub_14": "broadcast", "sub_15": "subtract", "exp_3": "exponential", "constant_15": "constant", "reduce_1": "reduce", "broadcast_in_dim_7": "reshape", "div_20": "broadcast", "div_21": "reshape", "div_22": "broadcast", "div_23": "divide", "sharding_constraint_22": "copy", "dot_3": "dot", "sharding_constraint_23": "copy", "reshape_13": "reshape", "transpose_10": "transpose", "sharding_constraint_24": "copy", "dot_4": "dot", "sharding_constraint_25": "copy", "transpose_11": "transpose", "reshape_14": "reshape", "sharding_constraint_26": "copy", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output", "mod_query": "query", "mod_attention_weights": "attention_weights", "mod_value": "value", "mod_output": "output", "mod_key": "key"};
-    const graph_node_display_names = {"param_2": "key.kernel", "param_4": "output.kernel", "param_1": "query.kernel", "param_3": "value.kernel", "param": "args[0]", "dot": "dot", "sharding_constraint_18": "copy", "reshape_9": "reshape", "transpose_8": "transpose", "sharding_constraint_19": "copy", "dot_1": "dot", "sharding_constraint_20": "copy", "reshape_11": "reshape", "transpose_9": "transpose", "sharding_constraint_21": "copy", "dot_2": "dot", "constant_13": "constant", "div_18": "broadcast", "div_19": "divide", "constant_14": "constant", "reduce": "reduce", "max_6": "broadcast", "max_7": "maximum", "broadcast_in_dim_6": "reshape", "sub_12": "broadcast", "sub_13": "reshape", "sub_14": "broadcast", "sub_15": "subtract", "exp_3": "exponential", "constant_15": "constant", "reduce_1": "reduce", "broadcast_in_dim_7": "reshape", "div_20": "broadcast", "div_21": "reshape", "div_22": "broadcast", "div_23": "divide", "sharding_constraint_22": "copy", "dot_3": "dot", "sharding_constraint_23": "copy", "reshape_13": "reshape", "transpose_10": "transpose", "sharding_constraint_24": "copy", "dot_4": "dot", "sharding_constraint_25": "copy", "transpose_11": "transpose", "reshape_14": "reshape", "sharding_constraint_26": "copy", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output_0", "mod_query": "query", "mod_attention_weights": "attention_weights", "mod_value": "value", "mod_output": "output", "mod_key": "key"};
-    const node_to_attr_name = {"param_2": "kernel", "param_4": "kernel", "param_1": "kernel", "param_3": "kernel"};
-    const ancestor_map = {"mod_query": null, "mod_attention_weights": null, "mod_value": null, "mod_output": null, "mod_key": null, "param_2": "mod_key", "param_4": "mod_output", "param_1": "mod_query", "param_3": "mod_value", "param": null, "dot": null, "sharding_constraint_18": null, "reshape_9": null, "transpose_8": null, "sharding_constraint_19": null, "dot_1": null, "sharding_constraint_20": null, "reshape_11": null, "transpose_9": null, "sharding_constraint_21": null, "dot_2": "mod_attention_weights", "constant_13": null, "div_18": "mod_attention_weights", "div_19": "mod_attention_weights", "constant_14": null, "reduce": "mod_attention_weights", "max_6": "mod_attention_weights", "max_7": "mod_attention_weights", "broadcast_in_dim_6": "mod_attention_weights", "sub_12": "mod_attention_weights", "sub_13": "mod_attention_weights", "sub_14": "mod_attention_weights", "sub_15": "mod_attention_weights", "exp_3": "mod_attention_weights", "constant_15": null, "reduce_1": "mod_attention_weights", "broadcast_in_dim_7": "mod_attention_weights", "div_20": "mod_attention_weights", "div_21": "mod_attention_weights", "div_22": "mod_attention_weights", "div_23": "mod_attention_weights", "sharding_constraint_22": null, "dot_3": null, "sharding_constraint_23": null, "reshape_13": null, "transpose_10": null, "sharding_constraint_24": null, "dot_4": null, "sharding_constraint_25": null, "transpose_11": null, "reshape_14": null, "sharding_constraint_26": null, "dot_5": null, "all_reduce": null, "output_0": null};
+    const adj_list = {"param_3": {"edges": [{"target": "dot_2", "dims": "(128, 2, 16)", "shape_info": {"global": [128, 8, 16], "local": [128, 2, 16], "partitions": [1, 4, 1], "axes": [[], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "param_3->dot_2"}], "failed": false, "node_type": "Parameter"}, "param_4": {"edges": [{"target": "dot_5", "dims": "(2, 16, 128)", "shape_info": {"global": [8, 16, 128], "local": [2, 16, 128], "partitions": [4, 1, 1], "axes": [[{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "param_4->dot_5"}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_1", "dims": "(128, 2, 16)", "shape_info": {"global": [128, 8, 16], "local": [128, 2, 16], "partitions": [1, 4, 1], "axes": [[], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "param_2->dot_1"}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot", "dims": "(128, 2, 16)", "shape_info": {"global": [128, 8, 16], "local": [128, 2, 16], "partitions": [1, 4, 1], "axes": [[], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "param_1->dot"}], "failed": false, "node_type": "Parameter"}, "param": {"edges": [{"target": "dot", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot"}, {"target": "dot_1", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_1"}, {"target": "dot_2", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "param->dot_2"}], "failed": false, "node_type": "Input"}, "dot": {"edges": [{"target": "dot_4", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "dot->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_1": {"edges": [{"target": "reshape_6", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "dot_1->reshape_6"}], "failed": false, "node_type": "Operation"}, "reshape_6": {"edges": [{"target": "dot_3", "dims": "(4, 32, 2, 1, 16)", "shape_info": {"global": [8, 32, 8, 1, 16], "local": [4, 32, 2, 1, 16], "partitions": [2, 1, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "reshape_6->dot_3"}], "failed": false, "node_type": "Operation"}, "dot_2": {"edges": [{"target": "dot_3", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "dot_2->dot_3"}], "failed": false, "node_type": "Operation"}, "dot_3": {"edges": [{"target": "mul_5", "dims": "(4, 2, 32, 1, 32)", "shape_info": {"global": [8, 8, 32, 1, 32], "local": [4, 2, 32, 1, 32], "partitions": [2, 4, 1, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], [], []], "status": "verified"}, "edge_data_id": "dot_3->mul_5"}], "failed": false, "node_type": "Operation"}, "constant_3_clone": {"edges": [{"target": "mul_4", "dims": "( )", "shape_info": {"global": null, "local": [], "partitions": null, "axes": null, "status": "unavailable"}, "edge_data_id": "constant_3_clone->mul_4"}], "failed": false, "node_type": "Constant"}, "mul_4": {"edges": [{"target": "mul_5", "dims": "(4, 2, 32, 1, 32)", "shape_info": {"global": [8, 8, 32, 1, 32], "local": [4, 2, 32, 1, 32], "partitions": [2, 4, 1, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], [], []], "status": "verified"}, "edge_data_id": "mul_4->mul_5"}], "failed": false, "node_type": "Operation"}, "mul_5": {"edges": [{"target": "transpose_6", "dims": "(4, 2, 32, 1, 32)", "shape_info": {"global": [8, 8, 32, 1, 32], "local": [4, 2, 32, 1, 32], "partitions": [2, 4, 1, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], [], []], "status": "verified"}, "edge_data_id": "mul_5->transpose_6"}, {"target": "reduce", "dims": "(4, 2, 32, 1, 32)", "shape_info": {"global": [8, 8, 32, 1, 32], "local": [4, 2, 32, 1, 32], "partitions": [2, 4, 1, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], [], []], "status": "verified"}, "edge_data_id": "mul_5->reduce"}], "failed": false, "node_type": "Operation"}, "transpose_6": {"edges": [{"target": "sub_11", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_6->sub_11"}], "failed": false, "node_type": "Operation"}, "constant_0_clone": {"edges": [{"target": "reduce", "dims": "( )", "shape_info": {"global": null, "local": [], "partitions": null, "axes": null, "status": "unavailable"}, "edge_data_id": "constant_0_clone->reduce"}, {"target": "max_4", "dims": "( )", "shape_info": {"global": null, "local": [], "partitions": null, "axes": null, "status": "unavailable"}, "edge_data_id": "constant_0_clone->max_4"}], "failed": false, "node_type": "Constant"}, "reduce": {"edges": [{"target": "max_5", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "reduce->max_5"}], "failed": false, "node_type": "Operation"}, "max_4": {"edges": [{"target": "max_5", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "max_4->max_5"}], "failed": false, "node_type": "Operation"}, "max_5": {"edges": [{"target": "transpose_7", "dims": "(4, 2, 32, 1)", "shape_info": {"global": [8, 8, 32, 1], "local": [4, 2, 32, 1], "partitions": [2, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "max_5->transpose_7"}], "failed": false, "node_type": "Operation"}, "transpose_7": {"edges": [{"target": "sub_8", "dims": "(1, 4, 2, 32, 1)", "shape_info": {"global": [1, 8, 8, 32, 1], "local": [1, 4, 2, 32, 1], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_7->sub_8"}], "failed": false, "node_type": "Operation"}, "sub_8": {"edges": [{"target": "sub_9", "dims": "(1, 4, 2, 32, 1)", "shape_info": {"global": [1, 8, 8, 32, 1], "local": [1, 4, 2, 32, 1], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_8->sub_9"}], "failed": false, "node_type": "Operation"}, "sub_9": {"edges": [{"target": "sub_10", "dims": "(1, 4, 2, 32)", "shape_info": {"global": [1, 8, 8, 32], "local": [1, 4, 2, 32], "partitions": [1, 2, 4, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "sub_9->sub_10"}], "failed": false, "node_type": "Operation"}, "sub_10": {"edges": [{"target": "sub_11", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_10->sub_11"}], "failed": false, "node_type": "Operation"}, "sub_11": {"edges": [{"target": "exp_2", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "sub_11->exp_2"}], "failed": false, "node_type": "Operation"}, "exp_2": {"edges": [{"target": "reduce_1", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_2->reduce_1"}, {"target": "div_11", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "exp_2->div_11"}], "failed": false, "node_type": "Operation"}, "constant_1_clone": {"edges": [{"target": "reduce_1", "dims": "( )", "shape_info": {"global": null, "local": [], "partitions": null, "axes": null, "status": "unavailable"}, "edge_data_id": "constant_1_clone->reduce_1"}], "failed": false, "node_type": "Constant"}, "reduce_1": {"edges": [{"target": "broadcast_in_dim_2", "dims": "(1, 4, 2, 32)", "shape_info": {"global": [1, 8, 8, 32], "local": [1, 4, 2, 32], "partitions": [1, 2, 4, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reduce_1->broadcast_in_dim_2"}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_2": {"edges": [{"target": "div_8", "dims": "(1, 4, 2, 32, 1)", "shape_info": {"global": [1, 8, 8, 32, 1], "local": [1, 4, 2, 32, 1], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "broadcast_in_dim_2->div_8"}], "failed": false, "node_type": "Operation"}, "div_8": {"edges": [{"target": "div_9", "dims": "(1, 4, 2, 32, 1)", "shape_info": {"global": [1, 8, 8, 32, 1], "local": [1, 4, 2, 32, 1], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_8->div_9"}], "failed": false, "node_type": "Operation"}, "div_9": {"edges": [{"target": "div_10", "dims": "(1, 4, 2, 32)", "shape_info": {"global": [1, 8, 8, 32], "local": [1, 4, 2, 32], "partitions": [1, 2, 4, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "div_9->div_10"}], "failed": false, "node_type": "Operation"}, "div_10": {"edges": [{"target": "div_11", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_10->div_11"}], "failed": false, "node_type": "Operation"}, "div_11": {"edges": [{"target": "dot_4", "dims": "(1, 4, 2, 32, 32)", "shape_info": {"global": [1, 8, 8, 32, 32], "local": [1, 4, 2, 32, 32], "partitions": [1, 2, 4, 1, 1], "axes": [[], [{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "div_11->dot_4"}], "failed": false, "node_type": "Operation"}, "dot_4": {"edges": [{"target": "transpose_8", "dims": "(4, 2, 16, 1, 32)", "shape_info": {"global": [8, 8, 16, 1, 32], "local": [4, 2, 16, 1, 32], "partitions": [2, 4, 1, 1, 1], "axes": [[{"name": "data", "size": 2}], [{"name": "model", "size": 4}], [], [], []], "status": "verified"}, "edge_data_id": "dot_4->transpose_8"}], "failed": false, "node_type": "Operation"}, "transpose_8": {"edges": [{"target": "reshape_8", "dims": "(4, 32, 2, 1, 16)", "shape_info": {"global": [8, 32, 8, 1, 16], "local": [4, 32, 2, 1, 16], "partitions": [2, 1, 4, 1, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], [], []], "status": "verified"}, "edge_data_id": "transpose_8->reshape_8"}], "failed": false, "node_type": "Operation"}, "reshape_8": {"edges": [{"target": "dot_5", "dims": "(4, 32, 2, 16)", "shape_info": {"global": [8, 32, 8, 16], "local": [4, 32, 2, 16], "partitions": [2, 1, 4, 1], "axes": [[{"name": "data", "size": 2}], [], [{"name": "model", "size": 4}], []], "status": "verified"}, "edge_data_id": "reshape_8->dot_5"}], "failed": false, "node_type": "Operation"}, "dot_5": {"edges": [{"target": "all_reduce", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "dot_5->all_reduce"}], "failed": false, "node_type": "Operation"}, "all_reduce": {"edges": [{"target": "output_0", "dims": "(4, 32, 128)", "shape_info": {"global": [8, 32, 128], "local": [4, 32, 128], "partitions": [2, 1, 1], "axes": [[{"name": "data", "size": 2}], [], []], "status": "verified"}, "edge_data_id": "all_reduce->output_0"}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const module_info = {"mod_HeadParallelAttention": {"name": "HeadParallelAttention", "path": "HeadParallelAttention", "depth": 0}, "mod_HeadParallelAttention_attention": {"name": "attention", "path": "HeadParallelAttention/attention", "depth": 1}, "mod_HeadParallelAttention_attention_key": {"name": "key", "path": "HeadParallelAttention/attention/key", "depth": 2}, "mod_HeadParallelAttention_attention_value": {"name": "value", "path": "HeadParallelAttention/attention/value", "depth": 2}, "mod_HeadParallelAttention_attention_out": {"name": "out", "path": "HeadParallelAttention/attention/out", "depth": 2}, "mod_HeadParallelAttention_attention_query": {"name": "query", "path": "HeadParallelAttention/attention/query", "depth": 2}};
+    const func_info = {"param_3": {"positional_args": [], "keyword_args": {}}, "param_4": {"positional_args": [], "keyword_args": {}}, "param_2": {"positional_args": [], "keyword_args": {}}, "param_1": {"positional_args": [], "keyword_args": {}}, "param": {"positional_args": [], "keyword_args": {}}, "dot": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 2, 16], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "dot_1": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 2, 16], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "reshape_6": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_2": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}, {"_type": "tensor", "shape": [128, 2, 16], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2}", "rhs_contracting_dims": "{0}"}}, "dot_3": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 1, 16], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,2}", "lhs_contracting_dims": "{4}", "rhs_batch_dims": "{0,2}", "rhs_contracting_dims": "{3}"}}, "constant_3_clone": {"positional_args": [], "keyword_args": {}}, "mul_4": {"positional_args": [0.25], "keyword_args": {"dimensions": "{}"}}, "mul_5": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 1, 32], "dtype": "f32"}], "keyword_args": {}}, "transpose_6": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_0_clone": {"positional_args": [], "keyword_args": {}}, "reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1, 32], "dtype": "f32"}, -Infinity], "keyword_args": {"dimensions": "{4}", "to_apply": "%region_0.0"}}, "max_4": {"positional_args": [-Infinity], "keyword_args": {"dimensions": "{}"}}, "max_5": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}, {"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "transpose_7": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "sub_8": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3,4}"}}, "sub_9": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "sub_10": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "sub_11": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "exp_2": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "constant_1_clone": {"positional_args": [], "keyword_args": {}}, "reduce_1": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}, 0.0], "keyword_args": {"dimensions": "{4}", "to_apply": "%region_1.0"}}, "broadcast_in_dim_2": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32], "dtype": "f32"}], "keyword_args": {}}, "div_8": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3,4}"}}, "div_9": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 1], "dtype": "f32"}], "keyword_args": {}}, "div_10": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,1,2,3}"}}, "div_11": {"positional_args": [{"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}, {"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {}}, "dot_4": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}, {"_type": "tensor", "shape": [1, 4, 2, 32, 32], "dtype": "f32"}], "keyword_args": {"lhs_batch_dims": "{0,2}", "lhs_contracting_dims": "{1}", "rhs_batch_dims": "{1,2}", "rhs_contracting_dims": "{4}"}}, "transpose_8": {"positional_args": [{"_type": "tensor", "shape": [4, 2, 16, 1, 32], "dtype": "f32"}], "keyword_args": {"dimensions": "{0,4,1,3,2}"}}, "reshape_8": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 1, 16], "dtype": "f32"}], "keyword_args": {}}, "dot_5": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 2, 16], "dtype": "f32"}, {"_type": "tensor", "shape": [2, 16, 128], "dtype": "f32"}], "keyword_args": {"lhs_contracting_dims": "{2,3}", "rhs_contracting_dims": "{0,1}"}}, "all_reduce": {"positional_args": [{"_type": "tensor", "shape": [4, 32, 128], "dtype": "f32"}], "keyword_args": {"channel_id": "1", "replica_groups": "{{0,1,2,3},{4,5,6,7}}", "use_global_device_ids": "true", "to_apply": "%add.clone"}}};
+    const parent_module_to_nodes = {"mod_HeadParallelAttention": ["mod_HeadParallelAttention_attention", "constant_3_clone", "constant_0_clone", "transpose_7", "constant_1_clone", "transpose_8"], "mod_HeadParallelAttention_attention": ["mod_HeadParallelAttention_attention_key", "mod_HeadParallelAttention_attention_value", "mod_HeadParallelAttention_attention_out", "mod_HeadParallelAttention_attention_query", "dot", "dot_1", "reshape_6", "dot_2", "dot_3", "mul_4", "mul_5", "transpose_6", "reduce", "max_4", "max_5", "sub_8", "sub_9", "sub_10", "sub_11", "exp_2", "reduce_1", "broadcast_in_dim_2", "div_8", "div_9", "div_10", "div_11", "dot_4", "reshape_8", "dot_5", "all_reduce"], "mod_HeadParallelAttention_attention_key": ["param_3"], "mod_HeadParallelAttention_attention_out": ["param_4"], "mod_HeadParallelAttention_attention_query": ["param_2"], "mod_HeadParallelAttention_attention_value": ["param_1"]};
+    const parent_module_to_depth = {"mod_HeadParallelAttention": 0, "mod_HeadParallelAttention_attention": 1, "mod_HeadParallelAttention_attention_key": 2, "mod_HeadParallelAttention_attention_value": 2, "mod_HeadParallelAttention_attention_out": 2, "mod_HeadParallelAttention_attention_query": 2};
+    const graph_node_name_to_without_suffix = {"param_3": "param", "param_4": "param", "param_2": "param", "param_1": "param", "param": "input", "dot": "dot", "dot_1": "dot", "reshape_6": "reshape", "dot_2": "dot", "dot_3": "dot", "constant_3_clone": "constant", "mul_4": "broadcast", "mul_5": "multiply", "transpose_6": "reshape", "constant_0_clone": "constant", "reduce": "reduce", "max_4": "broadcast", "max_5": "maximum", "transpose_7": "reshape", "sub_8": "broadcast", "sub_9": "reshape", "sub_10": "broadcast", "sub_11": "subtract", "exp_2": "exponential", "constant_1_clone": "constant", "reduce_1": "reduce", "broadcast_in_dim_2": "reshape", "div_8": "broadcast", "div_9": "reshape", "div_10": "broadcast", "div_11": "divide", "dot_4": "dot", "transpose_8": "transpose", "reshape_8": "reshape", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output", "mod_HeadParallelAttention": "HeadParallelAttention", "mod_HeadParallelAttention_attention": "attention", "mod_HeadParallelAttention_attention_key": "key", "mod_HeadParallelAttention_attention_value": "value", "mod_HeadParallelAttention_attention_out": "out", "mod_HeadParallelAttention_attention_query": "query"};
+    const graph_node_display_names = {"param_3": "attention.key.kernel", "param_4": "attention.out.kernel", "param_2": "attention.query.kernel", "param_1": "attention.value.kernel", "param": "args[0]", "dot": "dot", "dot_1": "dot", "reshape_6": "reshape", "dot_2": "dot", "dot_3": "dot", "constant_3_clone": "constant", "mul_4": "broadcast", "mul_5": "multiply", "transpose_6": "reshape", "constant_0_clone": "constant", "reduce": "reduce", "max_4": "broadcast", "max_5": "maximum", "transpose_7": "reshape", "sub_8": "broadcast", "sub_9": "reshape", "sub_10": "broadcast", "sub_11": "subtract", "exp_2": "exponential", "constant_1_clone": "constant", "reduce_1": "reduce", "broadcast_in_dim_2": "reshape", "div_8": "broadcast", "div_9": "reshape", "div_10": "broadcast", "div_11": "divide", "dot_4": "dot", "transpose_8": "transpose", "reshape_8": "reshape", "dot_5": "dot", "all_reduce": "all-reduce", "output_0": "output_0", "mod_HeadParallelAttention": "HeadParallelAttention", "mod_HeadParallelAttention_attention": "attention", "mod_HeadParallelAttention_attention_key": "key", "mod_HeadParallelAttention_attention_value": "value", "mod_HeadParallelAttention_attention_out": "out", "mod_HeadParallelAttention_attention_query": "query"};
+    const node_to_attr_name = {"param_3": "kernel", "param_4": "kernel", "param_2": "kernel", "param_1": "kernel"};
+    const ancestor_map = {"mod_HeadParallelAttention": null, "mod_HeadParallelAttention_attention": "mod_HeadParallelAttention", "mod_HeadParallelAttention_attention_key": "mod_HeadParallelAttention_attention", "mod_HeadParallelAttention_attention_value": "mod_HeadParallelAttention_attention", "mod_HeadParallelAttention_attention_out": "mod_HeadParallelAttention_attention", "mod_HeadParallelAttention_attention_query": "mod_HeadParallelAttention_attention", "param_3": "mod_HeadParallelAttention_attention_key", "param_4": "mod_HeadParallelAttention_attention_out", "param_2": "mod_HeadParallelAttention_attention_query", "param_1": "mod_HeadParallelAttention_attention_value", "param": null, "dot": "mod_HeadParallelAttention_attention", "dot_1": "mod_HeadParallelAttention_attention", "reshape_6": "mod_HeadParallelAttention_attention", "dot_2": "mod_HeadParallelAttention_attention", "dot_3": "mod_HeadParallelAttention_attention", "constant_3_clone": "mod_HeadParallelAttention", "mul_4": "mod_HeadParallelAttention_attention", "mul_5": "mod_HeadParallelAttention_attention", "transpose_6": "mod_HeadParallelAttention_attention", "constant_0_clone": "mod_HeadParallelAttention", "reduce": "mod_HeadParallelAttention_attention", "max_4": "mod_HeadParallelAttention_attention", "max_5": "mod_HeadParallelAttention_attention", "transpose_7": "mod_HeadParallelAttention", "sub_8": "mod_HeadParallelAttention_attention", "sub_9": "mod_HeadParallelAttention_attention", "sub_10": "mod_HeadParallelAttention_attention", "sub_11": "mod_HeadParallelAttention_attention", "exp_2": "mod_HeadParallelAttention_attention", "constant_1_clone": "mod_HeadParallelAttention", "reduce_1": "mod_HeadParallelAttention_attention", "broadcast_in_dim_2": "mod_HeadParallelAttention_attention", "div_8": "mod_HeadParallelAttention_attention", "div_9": "mod_HeadParallelAttention_attention", "div_10": "mod_HeadParallelAttention_attention", "div_11": "mod_HeadParallelAttention_attention", "dot_4": "mod_HeadParallelAttention_attention", "transpose_8": "mod_HeadParallelAttention", "reshape_8": "mod_HeadParallelAttention_attention", "dot_5": "mod_HeadParallelAttention_attention", "all_reduce": "mod_HeadParallelAttention_attention", "output_0": null};
     const repeat_containers = new Set([]);
     const REPEAT_CONTAINER_COLOR = "#FA8334";
-    const collapse_modules_after_depth = 1;
+    const collapse_modules_after_depth = 2;
     const show_module_attr_names = false;
-    const node_to_module_path = {'param_2': 'key', 'param_4': 'output', 'param_1': 'query', 'param_3': 'value', 'param': '', 'dot': '', 'sharding_constraint_18': '', 'reshape_9': '', 'transpose_8': '', 'sharding_constraint_19': '', 'dot_1': '', 'sharding_constraint_20': '', 'reshape_11': '', 'transpose_9': '', 'sharding_constraint_21': '', 'dot_2': 'attention_weights', 'constant_13': '', 'div_18': 'attention_weights', 'div_19': 'attention_weights', 'constant_14': '', 'reduce': 'attention_weights', 'max_6': 'attention_weights', 'max_7': 'attention_weights', 'broadcast_in_dim_6': 'attention_weights', 'sub_12': 'attention_weights', 'sub_13': 'attention_weights', 'sub_14': 'attention_weights', 'sub_15': 'attention_weights', 'exp_3': 'attention_weights', 'constant_15': '', 'reduce_1': 'attention_weights', 'broadcast_in_dim_7': 'attention_weights', 'div_20': 'attention_weights', 'div_21': 'attention_weights', 'div_22': 'attention_weights', 'div_23': 'attention_weights', 'sharding_constraint_22': '', 'dot_3': '', 'sharding_constraint_23': '', 'reshape_13': '', 'transpose_10': '', 'sharding_constraint_24': '', 'dot_4': '', 'sharding_constraint_25': '', 'transpose_11': '', 'reshape_14': '', 'sharding_constraint_26': '', 'dot_5': '', 'all_reduce': '', 'output_0': ''};
+    const node_to_module_path = {'param_3': 'HeadParallelAttention/attention/key', 'param_4': 'HeadParallelAttention/attention/out', 'param_2': 'HeadParallelAttention/attention/query', 'param_1': 'HeadParallelAttention/attention/value', 'param': '', 'dot': 'HeadParallelAttention/attention', 'dot_1': 'HeadParallelAttention/attention', 'reshape_6': 'HeadParallelAttention/attention', 'dot_2': 'HeadParallelAttention/attention', 'dot_3': 'HeadParallelAttention/attention', 'constant_3_clone': 'HeadParallelAttention', 'mul_4': 'HeadParallelAttention/attention', 'mul_5': 'HeadParallelAttention/attention', 'transpose_6': 'HeadParallelAttention/attention', 'constant_0_clone': 'HeadParallelAttention', 'reduce': 'HeadParallelAttention/attention', 'max_4': 'HeadParallelAttention/attention', 'max_5': 'HeadParallelAttention/attention', 'transpose_7': 'HeadParallelAttention', 'sub_8': 'HeadParallelAttention/attention', 'sub_9': 'HeadParallelAttention/attention', 'sub_10': 'HeadParallelAttention/attention', 'sub_11': 'HeadParallelAttention/attention', 'exp_2': 'HeadParallelAttention/attention', 'constant_1_clone': 'HeadParallelAttention', 'reduce_1': 'HeadParallelAttention/attention', 'broadcast_in_dim_2': 'HeadParallelAttention/attention', 'div_8': 'HeadParallelAttention/attention', 'div_9': 'HeadParallelAttention/attention', 'div_10': 'HeadParallelAttention/attention', 'div_11': 'HeadParallelAttention/attention', 'dot_4': 'HeadParallelAttention/attention', 'transpose_8': 'HeadParallelAttention', 'reshape_8': 'HeadParallelAttention/attention', 'dot_5': 'HeadParallelAttention/attention', 'all_reduce': 'HeadParallelAttention/attention', 'output_0': ''};
     const generateImage = false;
     const generateSvg = false;
     const show_modular_view = false;
@@ -1024,10 +955,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c` : `custom-tooltip_smaller_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`;
+        tooltip.className = !smaller ? `custom-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76` : `custom-tooltip_smaller_ddf6f35d-2350-4bcf-8b5a-0be436dadf76`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`);
+        const container = document.getElementById(`graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -1039,7 +970,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -1074,7 +1005,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+            if (isDimension) cell.className = "shape-dimension_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
         };
 
         addCell(label ? "(" : "");
@@ -1138,7 +1069,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+        row.className = "shape-connectors_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1158,7 +1089,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c shape-connector_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+            cell.className = "shape-dimension_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 shape-connector_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1225,7 +1156,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+        const container = document.getElementById("graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
         const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
@@ -1253,14 +1184,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+        tooltip.className = "shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+        const container = document.getElementById("graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1880,7 +1811,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").html("");
+        d3.select("#graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1947,16 +1878,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").remove();
+        d3.select("#png-link-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
+            const parent = d3.select("#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
-                .attr("id", "png-error-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+                .insert("div", "#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
+                .attr("id", "png-error-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                .attr("id", "png-error-message_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1994,21 +1925,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
+        const parent = d3.select("#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
-            .attr("id", "png-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            .insert("div", "#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
+            .attr("id", "png-link-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("id", "png-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.png`)
-            .attr("id", "png-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("download", `jaxviz_graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.png`)
+            .attr("id", "png-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -2029,26 +1960,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().parentNode;
+        const parent = d3.select("#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
-            .attr("id", "svg-link-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            .insert("div", "#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
+            .attr("id", "svg-link-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("id", "svg-download-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c.svg`)
-            .attr("id", "svg-save-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("download", `jaxviz_graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76.svg`)
+            .attr("id", "svg-save-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        const svg = d3.select("#graph_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -2062,7 +1993,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_ddf6f35d-2350-4bcf-8b5a-0be436dadf76") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -2080,7 +2011,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        .attr("id", "arrowhead_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2092,11 +2023,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        const clusters = inner.selectAll(".boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+        .attr("class", "boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2106,10 +2037,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                group.classed("error_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                group.classed("repeat-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
             }
 
             // Parse bounding box coordinates
@@ -2151,13 +2082,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                .attr("class", "collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                .attr("class", "collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2174,7 +2105,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        clusters.selectAll(".collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76, .collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2189,19 +2120,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        const edges = inner.selectAll(".edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+        .attr("class", "edge-group_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c implied-edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                return "edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76 implied-edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
             }
-            return "edge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+            return "edge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2227,7 +2158,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c)");
+        .attr("marker-end", "url(#arrowhead_ddf6f35d-2350-4bcf-8b5a-0be436dadf76)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2253,10 +2184,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                labelGroup.classed("has-shape-details_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                .attr("class", "edge-shape-info-badge_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2292,7 +2223,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("class", "edge-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2304,7 +2235,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const labelGroup = edgeGroup.select(".edge-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2345,19 +2276,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        const nodes = inner.selectAll(".node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                let classes = "node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2385,12 +2316,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    return "operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    return "operation_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
                 });
             } else {
                 // Create rectangle
@@ -2400,15 +2331,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "operation_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" : "operation_ddf6f35d-2350-4bcf-8b5a-0be436dadf76";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        .attr("class", "node-label_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2417,7 +2348,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        .attr("class", "type-indicator_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2435,7 +2366,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        inner.selectAll(".node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2446,14 +2377,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        .attr("class", "info-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        .attr("class", "info-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2469,16 +2400,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .info-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            nodeGroup.selectAll(".info-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76, .info-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
+                const infoButton = nodeGroup.select(".info-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+        inner.selectAll(".node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2500,7 +2431,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "collapse-button-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("class", isExpandable ? "collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" : "collapse-button-disabled_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2509,7 +2440,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c" : "collapse-icon-disabled_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+            .attr("class", isExpandable ? "collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76" : "collapse-icon-disabled_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2529,7 +2460,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c, .collapse-icon_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                nodeGroup.selectAll(".collapse-button_ddf6f35d-2350-4bcf-8b5a-0be436dadf76, .collapse-icon_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2630,16 +2561,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+            clickedNodeElement.classed("highlight-node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
+                clickedNodeElement.classed("highlight-node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", false);
             }, 2000);
 
-            const popup = d3.select("#popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
-            const moduleTemplate = d3.select("#module-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
-            const tensorOpTemplate = d3.select("#tensor-op-template_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
-            const noInfoMessage = d3.select("#no-info_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const popup = d3.select("#popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
+            const moduleTemplate = d3.select("#module-template_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
+            const tensorOpTemplate = d3.select("#tensor-op-template_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
+            const noInfoMessage = d3.select("#no-info_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
             
             const nodeData = adj_list[nodeName];
             
@@ -2647,14 +2578,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(popupTitle);
+            d3.select("#popup-title_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c");
+            const attrNameRow = d3.select("#attr-name-row_ddf6f35d-2350-4bcf-8b5a-0be436dadf76");
 
             if (attrName) {
-                d3.select("#attr-name-value_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(attrName);
+                d3.select("#attr-name-value_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2666,31 +2597,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                moduleTemplate.style("display", "block").classed("content-shown_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
                 
-                d3.select("#module-extra-repr_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
+                const attributesContainer = d3.select("#module-attributes_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
+                const parametersContainer = d3.select("#module-parameters_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                noInfoMessage.style("display", "block").classed("content-shown_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2706,19 +2637,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").node().scrollTop = 0;
+            d3.select("#popup-content_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").style("display", "none");
+            d3.select("#popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").style("display", "none");
         }
         
-        d3.select(".popup-close_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c").on("click", closePopup);
+        d3.select(".popup-close_ddf6f35d-2350-4bcf-8b5a-0be436dadf76").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c`);
+        const popup = document.getElementById(`popup_ddf6f35d-2350-4bcf-8b5a-0be436dadf76`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c');
+            const editorContainers = popup.querySelectorAll('.json-viewer_ddf6f35d-2350-4bcf-8b5a-0be436dadf76');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2797,30 +2728,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                    const targetElement = inner.selectAll(".node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                        targetElement.classed("highlight-node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
+                            targetElement.classed("highlight-node_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c")
+                    const targetElement = inner.selectAll(".boundary-box_ddf6f35d-2350-4bcf-8b5a-0be436dadf76")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", true);
+                        targetElement.classed("highlight-cluster_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_9ba4b6f7-6a09-4bd0-a80f-7f742a0b991c", false);
+                            targetElement.classed("highlight-cluster_ddf6f35d-2350-4bcf-8b5a-0be436dadf76", false);
                         }, 2000); // Match the animation duration
                     }
                 }

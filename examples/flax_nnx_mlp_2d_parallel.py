@@ -1,30 +1,23 @@
-"""Flax NNX MLP with data and tensor parallelism on a 2D device mesh.
+"""Flax NNX MLP with data and tensor parallelism on a 2D mesh.
 
-The batch is split across the data axis while the hidden features are split
-across the model axis. This makes the hidden activation use both mesh axes at
-once and lets the per-device graph reveal the model-parallel communication.
+The batch is split across the data axis while each linear layer is tensor
+parallel across the model axis.
 """
 import jax
+
+# Simulate eight devices so the example runs on a CPU-only machine.
+jax.config.update("jax_num_cpu_devices", 8)
+
 import jax.numpy as jnp
 from flax import nnx
 
-# This tutorial intentionally simulates an eight-device CPU system. Configure
-# devices before the first JAX operation; production code should use its real
-# accelerator devices instead.
-try:
-    jax.config.update("jax_num_cpu_devices", 8)
-except RuntimeError:
-    pass
-cpu_devices = jax.devices("cpu")
-if len(cpu_devices) < 8:
-    raise RuntimeError("Restart Python and run this example before any JAX operation.")
 
 Auto = jax.sharding.AxisType.Auto
 mesh = jax.make_mesh(
     (2, 4),
     ("data", "model"),
     axis_types=(Auto, Auto),
-    devices=cpu_devices,
+    devices=jax.devices("cpu"),
 )
 
 
@@ -35,40 +28,30 @@ class MLP(nnx.Module):
             32,
             64,
             use_bias=False,
-            rngs=rngs,
-            # Each data replica owns a column-parallel slice of this weight.
             kernel_init=nnx.with_partitioning(init, (None, "model")),
+            rngs=rngs,
         )
         self.dense1 = nnx.Linear(
             64,
             32,
             use_bias=False,
-            rngs=rngs,
-            # Row-parallel slices are combined across the model axis.
             kernel_init=nnx.with_partitioning(init, ("model", None)),
+            rngs=rngs,
         )
 
     def __call__(self, x):
         x = self.dense0(x)
-        x = jax.lax.with_sharding_constraint(x, jax.P("data", "model"))
         x = nnx.relu(x)
-        x = self.dense1(x)
-        return x
+        return self.dense1(x)
 
 
-@nnx.jit
-def create_sharded_model():
-    model = MLP(nnx.Rngs(0))
-    state = nnx.state(model)
-    partition_specs = nnx.get_partition_spec(state)
-    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
-    nnx.update(model, sharded_state)
-    return model
+@jax.jit
+def create_model():
+    return MLP(nnx.Rngs(0))
 
 
 with jax.set_mesh(mesh):
-    model = create_sharded_model()
-    # Global (16, 32) becomes local (8, 32) on each data replica.
+    model = create_model()
     example_input = jax.device_put(jnp.ones((16, 32)), jax.P("data", None))
 
 trace_context = jax.set_mesh(mesh)

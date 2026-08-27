@@ -155,122 +155,53 @@
                 </div>
                 <div class="code-scroll">
                     <pre><code class="language-python" id="example-code">import jax
-import jax.numpy as jnp
-from flax import nnx
 from jaxviz import trace_model
 
 
-# This tutorial intentionally simulates an eight-device CPU system.
-try:
-    jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
-except RuntimeError:
-    pass
-cpu_devices = jax.devices(&quot;cpu&quot;)
-if len(cpu_devices) &lt; 8:
-    raise RuntimeError(&quot;Restart Python and run this example before any JAX operation.&quot;)
+# Simulate eight devices so the example runs on a CPU-only machine.
+jax.config.update(&quot;jax_num_cpu_devices&quot;, 8)
+
+import jax.numpy as jnp
+from flax import nnx
+
 
 Auto = jax.sharding.AxisType.Auto
 mesh = jax.make_mesh(
     (2, 4),
     (&quot;data&quot;, &quot;model&quot;),
     axis_types=(Auto, Auto),
-    devices=cpu_devices,
+    devices=jax.devices(&quot;cpu&quot;),
 )
-
-
-@jax.jit
-def attention_weights(query, key):
-    scale = jnp.sqrt(jnp.asarray(query.shape[-1], dtype=query.dtype))
-    scores = jnp.einsum(&quot;bhsd,bhtd-&gt;bhst&quot;, query, key) / scale
-    return jax.nn.softmax(scores, axis=-1)
 
 
 class HeadParallelAttention(nnx.Module):
     def __init__(self, rngs):
-        self.num_heads = 8
-        self.head_dim = 16
-        embedding_dim = self.num_heads * self.head_dim
-        init = nnx.initializers.lecun_normal()
-
-        # Column-parallel projections assign complete heads to model shards.
-        projection = nnx.with_partitioning(init, (None, &quot;model&quot;))
-        self.query = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
+        self.attention = nnx.MultiHeadAttention(
+            num_heads=8,
+            in_features=128,
             use_bias=False,
+            decode=False,
+            kernel_metadata={&quot;out_sharding&quot;: (None, &quot;model&quot;, None)},
+            out_kernel_metadata={&quot;out_sharding&quot;: (&quot;model&quot;, None, None)},
             rngs=rngs,
-            kernel_init=projection,
         )
-        self.key = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=projection,
-        )
-        self.value = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=projection,
-        )
-        # The row-parallel output projection combines the head shards.
-        self.output = nnx.Linear(
-            embedding_dim,
-            embedding_dim,
-            use_bias=False,
-            rngs=rngs,
-            kernel_init=nnx.with_partitioning(init, (&quot;model&quot;, None)),
-        )
-
-    def split_heads(self, x):
-        batch, sequence, _ = x.shape
-        x = x.reshape(batch, sequence, self.num_heads, self.head_dim)
-        return x.transpose(0, 2, 1, 3)
 
     def __call__(self, x):
-        projection_sharding = jax.P(&quot;data&quot;, None, &quot;model&quot;)
-        head_sharding = jax.P(&quot;data&quot;, &quot;model&quot;, None, None)
-
-        query = jax.lax.with_sharding_constraint(self.query(x), projection_sharding)
-        key = jax.lax.with_sharding_constraint(self.key(x), projection_sharding)
-        value = jax.lax.with_sharding_constraint(self.value(x), projection_sharding)
-
-        query = jax.lax.with_sharding_constraint(self.split_heads(query), head_sharding)
-        key = jax.lax.with_sharding_constraint(self.split_heads(key), head_sharding)
-        value = jax.lax.with_sharding_constraint(self.split_heads(value), head_sharding)
-
-        probabilities = attention_weights(query, key)
-        probabilities = jax.lax.with_sharding_constraint(probabilities, head_sharding)
-        context = jnp.einsum(&quot;bhst,bhtd-&gt;bhsd&quot;, probabilities, value)
-        context = jax.lax.with_sharding_constraint(context, head_sharding)
-
-        context = context.transpose(0, 2, 1, 3)
-        context = context.reshape(x.shape)
-        context = jax.lax.with_sharding_constraint(context, projection_sharding)
-        # Expand this module in the per-device graph to see its all-reduce.
-        return self.output(context)
+        return self.attention(x)
 
 
-@nnx.jit
-def create_sharded_model():
-    model = HeadParallelAttention(nnx.Rngs(0))
-    state = nnx.state(model)
-    partition_specs = nnx.get_partition_spec(state)
-    sharded_state = jax.lax.with_sharding_constraint(state, partition_specs)
-    nnx.update(model, sharded_state)
-    return model
+@jax.jit
+def create_model():
+    return HeadParallelAttention(nnx.Rngs(0))
 
 
 with jax.set_mesh(mesh):
-    model = create_sharded_model()
-    # Global (8, 32, 128) becomes local (4, 32, 128) across data replicas.
+    model = create_model()
     example_input = jax.device_put(
         jnp.ones((8, 32, 128)),
         jax.P(&quot;data&quot;, None, None),
     )
-    trace_model(model, example_input, view=&#x27;global&#x27;, collapse_modules_after_depth=1)
+    trace_model(model, example_input, view=&#x27;global&#x27;, collapse_modules_after_depth=2)
 </code></pre>
                 </div>
             </section>
@@ -278,124 +209,124 @@ with jax.set_mesh(mesh):
                 <div class="pane-toolbar">
                     <span>Interactive graph</span>
                 </div>
-                <div class="graph-stage"><div id="graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
-    <div id="graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8"></div>
-    <div class="logo_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
+                <div class="graph-stage"><div id="graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc">
+    <div id="graph_c0fec43c-671e-4344-b20b-79accb4b2dbc"></div>
+    <div class="logo_c0fec43c-671e-4344-b20b-79accb4b2dbc">
         <a href="https://github.com/sachinhosmani/jaxviz" target="_blank" rel="noopener noreferrer">
         jaxviz
         </a>
     </div>
-    <div id="popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" class="popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="display: none;">
-        <div class="popup-header_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
-            <h3 id="popup-title_9f70ac7f-4c2b-4bde-afcd-90323b273ec8"></h3>
-            <span class="popup-close_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">✕</span>
+    <div id="popup_c0fec43c-671e-4344-b20b-79accb4b2dbc" class="popup_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="display: none;">
+        <div class="popup-header_c0fec43c-671e-4344-b20b-79accb4b2dbc">
+            <h3 id="popup-title_c0fec43c-671e-4344-b20b-79accb4b2dbc"></h3>
+            <span class="popup-close_c0fec43c-671e-4344-b20b-79accb4b2dbc">✕</span>
         </div>
-        <div id="popup-content_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" class="popup-content_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
-            <div id="common-info_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
-                <p id="attr-name-row_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="display:none;">
-                    <strong>Attribute name:</strong> <code id="attr-name-value_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
+        <div id="popup-content_c0fec43c-671e-4344-b20b-79accb4b2dbc" class="popup-content_c0fec43c-671e-4344-b20b-79accb4b2dbc">
+            <div id="common-info_c0fec43c-671e-4344-b20b-79accb4b2dbc">
+                <p id="attr-name-row_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="display:none;">
+                    <strong>Attribute name:</strong> <code id="attr-name-value_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="background:#f0f0f0; padding:2px 5px; border-radius:3px; font-family:monospace;"></code>
                 </p>
             </div>
-            <div id="module-template_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="display:none;">
-                <details open id="module-parameters-details_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
+            <div id="module-template_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="display:none;">
+                <details open id="module-parameters-details_c0fec43c-671e-4344-b20b-79accb4b2dbc">
                     <summary style="color: black"><strong>forward() Parameters</strong></summary>
-                    <div id="module-parameters_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" class="json-viewer_9f70ac7f-4c2b-4bde-afcd-90323b273ec8"></div>
+                    <div id="module-parameters_c0fec43c-671e-4344-b20b-79accb4b2dbc" class="json-viewer_c0fec43c-671e-4344-b20b-79accb4b2dbc"></div>
                 </details>
-                <details open id="module-attributes-details_9f70ac7f-4c2b-4bde-afcd-90323b273ec8">
+                <details open id="module-attributes-details_c0fec43c-671e-4344-b20b-79accb4b2dbc">
                     <summary style="color: black"><strong>Attributes</strong></summary>
-                    <div id="module-attributes_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" class="json-viewer_9f70ac7f-4c2b-4bde-afcd-90323b273ec8"></div>
+                    <div id="module-attributes_c0fec43c-671e-4344-b20b-79accb4b2dbc" class="json-viewer_c0fec43c-671e-4344-b20b-79accb4b2dbc"></div>
                 </details>
             </div>
-            <div id="tensor-op-template_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="display:none;">
+            <div id="tensor-op-template_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="display:none;">
                 <summary><strong>Parameters</strong></summary>
-                <div id="tensor-op-parameters_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" class="json-viewer_9f70ac7f-4c2b-4bde-afcd-90323b273ec8"></div>
+                <div id="tensor-op-parameters_c0fec43c-671e-4344-b20b-79accb4b2dbc" class="json-viewer_c0fec43c-671e-4344-b20b-79accb4b2dbc"></div>
             </div>
-            <p id="no-info_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" style="display:none;">No further information available for this node.</p>
+            <p id="no-info_c0fec43c-671e-4344-b20b-79accb4b2dbc" style="display:none;">No further information available for this node.</p>
         </div>
     </div>
 
     <style>
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             stroke: #333;
             fill: #fff;
         }
-        text.node-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        text.node-label_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.type-indicator_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        text.type-indicator_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             cursor: default;
             user-select: none;
         }
-        text.collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        text.collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 14px;
             cursor: default;
             user-select: none;
         }
-        .edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .edge_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             stroke: #797979;
             fill: none;
         }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.input_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #FF9AFF; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: rgb(235 235 235); }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.input_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #FF9AFF; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.constant_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: rgb(235 235 235); }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.output_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #74e071; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.failed_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: rgb(224 15 15); }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.module_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #8BDEDB; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect.operation_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #FEBC5A; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.output_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #74e071; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.failed_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: rgb(224 15 15); }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.module_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #8BDEDB; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect.operation_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #FEBC5A; }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse.input_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #FF9AFF; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse.constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: rgb(235 235 235); }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse.output_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #74e071; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse.parameter_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: #B9CCF3; }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse.failed_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 { fill: rgb(224 15 15); }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse.input_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #FF9AFF; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse.constant_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: rgb(235 235 235); }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse.output_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #74e071; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse.parameter_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: #B9CCF3; }
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse.failed_c0fec43c-671e-4344-b20b-79accb4b2dbc { fill: rgb(224 15 15); }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse {
             stroke: #333;
             stroke-width: 1px;
         }
-        .edgeLabelGroup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .edgeLabelGroup_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             pointer-events: none;
         }
-        #arrowhead_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 path {
+        #arrowhead_c0fec43c-671e-4344-b20b-79accb4b2dbc path {
             fill: #333333;;
         }
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect,
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 ellipse {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect,
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc ellipse {
             transition: fill 0.3s ease;
         }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 .type-indicator_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc .type-indicator_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-size: 5px;
             fill: rgba(0, 0, 0, 1.0);  /* Dark grey, semi-transparent */
             pointer-events: none;
         }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.error_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc.error_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             stroke: black;
             stroke-width: 1px;
         }
 
-        .boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.error_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 > rect:first-of-type {
+        .boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc.error_c0fec43c-671e-4344-b20b-79accb4b2dbc > rect:first-of-type {
             fill: red;
             fill-opacity: 0.2;
         }
 
-        #graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: relative;
             height: 100%;
             width: 100%;
             overflow: hidden;
         }
 
-        #graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #graph_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             height: 100%;
         }
         
-        .popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .popup_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             position: absolute;
             background: white;
@@ -410,7 +341,7 @@ with jax.set_mesh(mesh):
             flex-direction: column;
         }
 
-        .popup-header_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .popup-header_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: sticky;
             top: 0;
             background: white;
@@ -422,12 +353,12 @@ with jax.set_mesh(mesh):
             z-index: 1;
         }
 
-        .popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 h3 {
+        .popup_c0fec43c-671e-4344-b20b-79accb4b2dbc h3 {
             margin: 0;
             font-size: 16px;
         }
 
-        .popup-content_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .popup-content_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             padding: 10px;
             padding-bottom: 10px;
             overflow-y: auto;
@@ -435,87 +366,87 @@ with jax.set_mesh(mesh):
             flex-grow: 1;
         }
 
-        .popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 pre {
+        .popup_c0fec43c-671e-4344-b20b-79accb4b2dbc pre {
             white-space: pre;
             overflow-x: auto;
         }
 
-        .popup-close_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .popup-close_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             cursor: pointer;
             font-size: 24px;
             font-weight: bold;
             line-height: 1;
         }
 
-        #popup-title_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #popup-title_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-size: 16px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             color: black;
         }
 
-        #graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: relative;
         }
 
-        #graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 pre {
+        #graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc pre {
             margin-bottom: 0;
         }
 
-        .boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             pointer-events: none;
         }
-        .boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 text {
+        .boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc text {
             pointer-events: none;
             user-select: none;
         }
 
-        .boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             pointer-events: none;
         }
-        .boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 text {
+        .boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc text {
             pointer-events: none;
             user-select: none;
             font-weight: bold;
         }
-        .edge-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 text {
+        .edge-label_c0fec43c-671e-4344-b20b-79accb4b2dbc text {
             pointer-events: none;
             user-select: none;
             font-size: 4px;
             font-family: "'Roboto', sans-serif";
         }
                     
-        .collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8, .info-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc, .info-button_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             fill: #fff;
             stroke: #333;
             stroke-width: 1px;
             cursor: pointer;
         }
 
-        .collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover, .info-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        .collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover, .info-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             fill: #eee;
             cursor: pointer;
         }
 
-        .collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8, .info-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc, .info-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             fill: rgb(51, 51, 51);
         }
 
-        .collapse-button-disabled_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .collapse-button-disabled_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             fill: #eee5;
             stroke: #3333334f;
             stroke-width: 1px;
             cursor: not-allowed;
         }
 
-        .collapse-button-disabled_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        .collapse-button-disabled_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             fill: #eee6;
             cursor: not-allowed;
         }
 
-        .collapse-icon-disabled_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .collapse-icon-disabled_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             pointer-events: none;
             user-select: none;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -524,23 +455,23 @@ with jax.set_mesh(mesh):
         }
 
         /* Edge hover styles */
-        .edge-group_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 path {
+        .edge-group_c0fec43c-671e-4344-b20b-79accb4b2dbc path {
             pointer-events: stroke;
         }
 
-        .edge-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .edge-label_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             pointer-events: all;
         }
 
-        .edge-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.has-shape-details_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .edge-label_c0fec43c-671e-4344-b20b-79accb4b2dbc.has-shape-details_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             cursor: help;
         }
 
-        .edge-shape-info-badge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 circle {
+        .edge-shape-info-badge_c0fec43c-671e-4344-b20b-79accb4b2dbc circle {
             fill: #6657A8;
         }
 
-        .edge-shape-info-badge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 text {
+        .edge-shape-info-badge_c0fec43c-671e-4344-b20b-79accb4b2dbc text {
             fill: white;
             font: 700 5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             pointer-events: none;
@@ -582,50 +513,50 @@ with jax.set_mesh(mesh):
             }
         }
 
-        .highlight-cluster_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 > rect:first-of-type {
+        .highlight-cluster_c0fec43c-671e-4344-b20b-79accb4b2dbc > rect:first-of-type {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        .highlight-node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .highlight-node_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             animation: 
                 containerStrokeHighlight 2.0s ease-in-out forwards;
         }
 
-        text.node-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        text.node-label_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             font-size: 0.8rem;  /* Base size using rem units for accessibility */
             cursor: default;
             user-select: none;
         }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 .node-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc.constant_c0fec43c-671e-4344-b20b-79accb4b2dbc .node-label_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             font-size: 0.7rem;
         }
 
-        .popup-content_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 summary {
+        .popup-content_c0fec43c-671e-4344-b20b-79accb4b2dbc summary {
             cursor: pointer;
             margin: 5px;
             user-select: none;
         }
 
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.input_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect,
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.output_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect,
-        .node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc.input_c0fec43c-671e-4344-b20b-79accb4b2dbc rect,
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc.output_c0fec43c-671e-4344-b20b-79accb4b2dbc rect,
+        .node_c0fec43c-671e-4344-b20b-79accb4b2dbc.constant_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             stroke-width: 1px;
             rx: 8px;
             ry: 8px;
             stroke-dasharray: none;
         }
 
-        #png-error-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #png-error-container_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             text-align: center;
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 14px;
         }
 
-        #png-error-message_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #png-error-message_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             padding: 8px 16px;
             background-color: #dc3545;
             color: white;
@@ -636,13 +567,13 @@ with jax.set_mesh(mesh):
             text-align: left;
         }
 
-        #png-link-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #png-link-container_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
-        #png-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #png-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -652,11 +583,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #png-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        #png-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             background-color: #0056b3;
         }
 
-        #png-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #png-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -665,18 +596,18 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #png-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        #png-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             background-color: #0056b3;
         }
 
-        #svg-link-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #svg-link-container_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             padding: 10px;
             border-bottom: 1px solid #ccc;
             font-size: 18px;
         }
 
 
-        #svg-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #svg-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -686,11 +617,11 @@ with jax.set_mesh(mesh):
             margin-right: 8px;
         }
 
-        #svg-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        #svg-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             background-color: #0056b3;
         }
 
-        #svg-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        #svg-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             display: inline-block;
             padding: 8px 16px;
             background-color: #007bff;
@@ -699,11 +630,11 @@ with jax.set_mesh(mesh):
             border-radius: 4px;
         }
 
-        #svg-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8:hover {
+        #svg-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc:hover {
             background-color: #0056b3;
         }
 
-        .custom-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .custom-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -719,7 +650,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .custom-tooltip_smaller_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .custom-tooltip_smaller_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: absolute;
             background: white;
             border: 1px solid #ccc;
@@ -735,7 +666,7 @@ with jax.set_mesh(mesh):
             display: none;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: absolute;
             z-index: 1000;
             display: none;
@@ -749,71 +680,71 @@ with jax.set_mesh(mesh):
             transform-origin: top left;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 table {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc table {
             border-collapse: collapse;
             white-space: nowrap;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 th {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc th {
             padding: 2px 12px 2px 0;
             color: #555;
             font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: right;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td {
             padding: 2px 0;
             font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             text-align: center;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-dimension_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-dimension_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             min-width: 30px;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             height: 36px;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 svg {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc svg {
             display: block;
             margin: 0 auto;
             overflow: visible;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 line {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc line {
             stroke: #8C80BD;
             stroke-width: 1.25;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 polygon {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc polygon {
             fill: #8C80BD;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 rect {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc rect {
             fill: white;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 td.shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 text {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc td.shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc text {
             fill: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 tr.shape-connectors_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 th {
+        .shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc tr.shape-connectors_c0fec43c-671e-4344-b20b-79accb4b2dbc th {
             color: #6657A8;
             font: 400 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
-        .edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.implied-edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .edge_c0fec43c-671e-4344-b20b-79accb4b2dbc.implied-edge_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             stroke-dasharray: 5,5;
         }
 
-        .logo_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 {
+        .logo_c0fec43c-671e-4344-b20b-79accb4b2dbc {
             position: absolute;
             bottom: 8px; left: 8px;
             padding: 4px 6px;
         }
-        .logo_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 a {
+        .logo_c0fec43c-671e-4344-b20b-79accb4b2dbc a {
             color: #a1a1a1;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             opacity: .6;
@@ -974,20 +905,20 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
 (function() {
-    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(8, 32, 128)", "edge_data_id": 4521749120}, {"target": "dot_general_3", "dims": "(8, 32, 128)", "edge_data_id": 4521749120}, {"target": "dot_general_5", "dims": "(8, 32, 128)", "edge_data_id": 4521749120}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(128, 128)", "edge_data_id": 4521964864}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_3", "dims": "(128, 128)", "edge_data_id": 4521955712}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_5", "dims": "(128, 128)", "edge_data_id": 4521957248}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "dot_general_23", "dims": "(128, 128)", "edge_data_id": 4522168896}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "sharding_constraint_2", "dims": "(8, 32, 128)", "edge_data_id": 4521958720}], "failed": false, "node_type": "Operation"}, "sharding_constraint_2": {"edges": [{"target": "reshape_7", "dims": "(8, 32, 128)", "edge_data_id": 4521955072}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "sharding_constraint_4", "dims": "(8, 32, 128)", "edge_data_id": 4521955584}], "failed": false, "node_type": "Operation"}, "sharding_constraint_4": {"edges": [{"target": "reshape_10", "dims": "(8, 32, 128)", "edge_data_id": 4521956480}], "failed": false, "node_type": "Operation"}, "dot_general_5": {"edges": [{"target": "sharding_constraint_6", "dims": "(8, 32, 128)", "edge_data_id": 4521952768}], "failed": false, "node_type": "Operation"}, "sharding_constraint_6": {"edges": [{"target": "reshape_13", "dims": "(8, 32, 128)", "edge_data_id": 4521953984}], "failed": false, "node_type": "Operation"}, "reshape_7": {"edges": [{"target": "transpose_8", "dims": "(8, 32, 8, 16)", "edge_data_id": 4521905600}], "failed": false, "node_type": "Operation"}, "transpose_8": {"edges": [{"target": "sharding_constraint_9", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521906752}], "failed": false, "node_type": "Operation"}, "sharding_constraint_9": {"edges": [{"target": "attention_weights_16", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521907840}], "failed": false, "node_type": "Operation"}, "reshape_10": {"edges": [{"target": "transpose_11", "dims": "(8, 32, 8, 16)", "edge_data_id": 4521913856}], "failed": false, "node_type": "Operation"}, "transpose_11": {"edges": [{"target": "sharding_constraint_12", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521918336}], "failed": false, "node_type": "Operation"}, "sharding_constraint_12": {"edges": [{"target": "attention_weights_16", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521903680}], "failed": false, "node_type": "Operation"}, "reshape_13": {"edges": [{"target": "transpose_14", "dims": "(8, 32, 8, 16)", "edge_data_id": 4521847360}], "failed": false, "node_type": "Operation"}, "transpose_14": {"edges": [{"target": "sharding_constraint_15", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521838976}], "failed": false, "node_type": "Operation"}, "sharding_constraint_15": {"edges": [{"target": "dot_general_18", "dims": "(8, 8, 32, 16)", "edge_data_id": 4521847552}], "failed": false, "node_type": "Operation"}, "attention_weights_16": {"edges": [{"target": "sharding_constraint_17", "dims": "(8, 8, 32, 32)", "edge_data_id": 4522002752}], "failed": false, "node_type": "Operation"}, "sharding_constraint_17": {"edges": [{"target": "dot_general_18", "dims": "(8, 8, 32, 32)", "edge_data_id": 4521845760}], "failed": false, "node_type": "Operation"}, "dot_general_18": {"edges": [{"target": "sharding_constraint_19", "dims": "(8, 8, 32, 16)", "edge_data_id": 4522164544}], "failed": false, "node_type": "Operation"}, "sharding_constraint_19": {"edges": [{"target": "transpose_20", "dims": "(8, 8, 32, 16)", "edge_data_id": 4522164480}], "failed": false, "node_type": "Operation"}, "transpose_20": {"edges": [{"target": "reshape_21", "dims": "(8, 32, 8, 16)", "edge_data_id": 4522165248}], "failed": false, "node_type": "Operation"}, "reshape_21": {"edges": [{"target": "sharding_constraint_22", "dims": "(8, 32, 128)", "edge_data_id": 4522168064}], "failed": false, "node_type": "Operation"}, "sharding_constraint_22": {"edges": [{"target": "dot_general_23", "dims": "(8, 32, 128)", "edge_data_id": 4522168384}], "failed": false, "node_type": "Operation"}, "dot_general_23": {"edges": [{"target": "output_0", "dims": "(8, 32, 128)", "edge_data_id": 4522169536}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
-    const module_info = {"scope_HeadParallelAttention_query": {"type": "query", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention": {"type": "HeadParallelAttention", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_key": {"type": "key", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_value": {"type": "value", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_bhst_bhtd__bhsd": {"type": "bhst,bhtd->bhsd", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_output": {"type": "output", "parameters": {}, "attributes": {}}};
-    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "sharding_constraint_2": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "dot_general_3": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "sharding_constraint_4": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "dot_general_5": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "sharding_constraint_6": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "reshape_7": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_8": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "sharding_constraint_9": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "reshape_10": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_11": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "sharding_constraint_12": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "reshape_13": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "transpose_14": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "sharding_constraint_15": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "attention_weights_16": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"in_shardings": "(UnspecifiedValue, UnspecifiedValue)", "out_shardings": "(UnspecifiedValue,)", "in_layouts": "(None, None)", "out_layouts": "(None,)", "donated_invars": "(False, False)", "ctx_mesh": "Mesh('data': 2, 'model': 4, axis_types=(Auto, Auto))", "name": "attention_weights", "keep_unused": "False", "inline": "False", "compiler_options_kvs": "()"}}, "sharding_constraint_17": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 32], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "dot_general_18": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((3,), (2,)), ((0, 1), (0, 1)))", "precision": "None", "preferred_element_type": "float32", "out_sharding": "None"}}, "sharding_constraint_19": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "transpose_20": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(0, 2, 1, 3)"}}, "reshape_21": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 128)", "dimensions": "None", "sharding": "None"}}, "sharding_constraint_22": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}], "keyword_args": {"sharding": "NamedSharding(mesh=AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), ", "layout": "None", "context_mesh": "AbstractMesh('data': 2, 'model': 4, axis_types=(Auto, Auto), device_kind=cpu, nu", "unconstrained_dims": "frozenset()"}}, "dot_general_23": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
-    const parent_module_to_nodes = {"scope_HeadParallelAttention_query": ["dot_general_1"], "scope_HeadParallelAttention": ["dot_general_1", "sharding_constraint_2", "dot_general_3", "sharding_constraint_4", "dot_general_5", "sharding_constraint_6", "reshape_7", "transpose_8", "sharding_constraint_9", "reshape_10", "transpose_11", "sharding_constraint_12", "reshape_13", "transpose_14", "sharding_constraint_15", "attention_weights_16", "sharding_constraint_17", "dot_general_18", "sharding_constraint_19", "transpose_20", "reshape_21", "sharding_constraint_22", "dot_general_23"], "scope_HeadParallelAttention_key": ["dot_general_3"], "scope_HeadParallelAttention_value": ["dot_general_5"], "scope_HeadParallelAttention_bhst_bhtd__bhsd": ["dot_general_18"], "scope_HeadParallelAttention_output": ["dot_general_23"]};
-    const parent_module_to_depth = {"scope_HeadParallelAttention_query": 1, "scope_HeadParallelAttention": 2, "scope_HeadParallelAttention_key": 1, "scope_HeadParallelAttention_value": 1, "scope_HeadParallelAttention_bhst_bhtd__bhsd": 1, "scope_HeadParallelAttention_output": 1};
-    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_query": "query", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "sharding_constraint_2": "sharding_constraint", "scope_HeadParallelAttention_key": "key", "dot_general_3": "dot_general", "sharding_constraint_4": "sharding_constraint", "scope_HeadParallelAttention_value": "value", "dot_general_5": "dot_general", "sharding_constraint_6": "sharding_constraint", "reshape_7": "reshape", "transpose_8": "transpose", "sharding_constraint_9": "sharding_constraint", "reshape_10": "reshape", "transpose_11": "transpose", "sharding_constraint_12": "sharding_constraint", "reshape_13": "reshape", "transpose_14": "transpose", "sharding_constraint_15": "sharding_constraint", "attention_weights_16": "attention_weights", "sharding_constraint_17": "sharding_constraint", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "bhst,bhtd->bhsd", "dot_general_18": "dot_general", "sharding_constraint_19": "sharding_constraint", "transpose_20": "transpose", "reshape_21": "reshape", "sharding_constraint_22": "sharding_constraint", "scope_HeadParallelAttention_output": "output", "dot_general_23": "dot_general", "output_0": "output"};
-    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_query": "query", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "sharding_constraint_2": "sharding_constraint", "scope_HeadParallelAttention_key": "key", "dot_general_3": "dot_general", "sharding_constraint_4": "sharding_constraint", "scope_HeadParallelAttention_value": "value", "dot_general_5": "dot_general", "sharding_constraint_6": "sharding_constraint", "reshape_7": "reshape", "transpose_8": "transpose", "sharding_constraint_9": "sharding_constraint", "reshape_10": "reshape", "transpose_11": "transpose", "sharding_constraint_12": "sharding_constraint", "reshape_13": "reshape", "transpose_14": "transpose", "sharding_constraint_15": "sharding_constraint", "attention_weights_16": "attention_weights", "sharding_constraint_17": "sharding_constraint", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "bhst,bhtd->bhsd", "dot_general_18": "dot_general", "sharding_constraint_19": "sharding_constraint", "transpose_20": "transpose", "reshape_21": "reshape", "sharding_constraint_22": "sharding_constraint", "scope_HeadParallelAttention_output": "output", "dot_general_23": "dot_general", "output_0": "output_0"};
+    const adj_list = {"input_0": {"edges": [{"target": "dot_general_1", "dims": "(8, 32, 128)", "edge_data_id": 4566560016}, {"target": "dot_general_2", "dims": "(8, 32, 128)", "edge_data_id": 4566560016}, {"target": "dot_general_3", "dims": "(8, 32, 128)", "edge_data_id": 4566560016}], "failed": false, "node_type": "Input"}, "param_0": {"edges": [{"target": "dot_general_1", "dims": "(128, 8, 16)", "edge_data_id": 4566328432}], "failed": false, "node_type": "Parameter"}, "param_1": {"edges": [{"target": "dot_general_2", "dims": "(128, 8, 16)", "edge_data_id": 4566558096}], "failed": false, "node_type": "Parameter"}, "param_2": {"edges": [{"target": "dot_general_3", "dims": "(128, 8, 16)", "edge_data_id": 4566557952}], "failed": false, "node_type": "Parameter"}, "param_3": {"edges": [{"target": "dot_general_22", "dims": "(8, 16, 128)", "edge_data_id": 4566558384}], "failed": false, "node_type": "Parameter"}, "dot_general_1": {"edges": [{"target": "reshape_4", "dims": "(8, 32, 8, 16)", "edge_data_id": 4566552816}], "failed": false, "node_type": "Operation"}, "dot_general_2": {"edges": [{"target": "dot_general_5", "dims": "(8, 32, 8, 16)", "edge_data_id": 4566558192}], "failed": false, "node_type": "Operation"}, "dot_general_3": {"edges": [{"target": "dot_general_18", "dims": "(8, 32, 8, 16)", "edge_data_id": 4566558000}], "failed": false, "node_type": "Operation"}, "reshape_4": {"edges": [{"target": "dot_general_5", "dims": "(8, 32, 8, 1, 16)", "edge_data_id": 4566558432}], "failed": false, "node_type": "Operation"}, "dot_general_5": {"edges": [{"target": "mul_6", "dims": "(8, 8, 32, 1, 32)", "edge_data_id": 4566389120}], "failed": false, "node_type": "Operation"}, "mul_6": {"edges": [{"target": "reduce_max_7", "dims": "(8, 8, 32, 1, 32)", "edge_data_id": 4566563280}, {"target": "transpose_12", "dims": "(8, 8, 32, 1, 32)", "edge_data_id": 4566563280}], "failed": false, "node_type": "Operation"}, "reduce_max_7": {"edges": [{"target": "max_8", "dims": "(8, 8, 32, 1)", "edge_data_id": 4566698784}], "failed": false, "node_type": "Operation"}, "max_8": {"edges": [{"target": "transpose_9", "dims": "(8, 8, 32, 1)", "edge_data_id": 4566698976}], "failed": false, "node_type": "Operation"}, "transpose_9": {"edges": [{"target": "broadcast_in_dim_10", "dims": "(1, 8, 8, 32)", "edge_data_id": 4566698880}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_10": {"edges": [{"target": "stop_gradient_11", "dims": "(1, 8, 8, 32, 1)", "edge_data_id": 4566699024}], "failed": false, "node_type": "Operation"}, "stop_gradient_11": {"edges": [{"target": "sub_13", "dims": "(1, 8, 8, 32, 1)", "edge_data_id": 4566699696}], "failed": false, "node_type": "Operation"}, "transpose_12": {"edges": [{"target": "sub_13", "dims": "(1, 8, 8, 32, 32)", "edge_data_id": 4566702048}], "failed": false, "node_type": "Operation"}, "sub_13": {"edges": [{"target": "exp_14", "dims": "(1, 8, 8, 32, 32)", "edge_data_id": 4566702384}], "failed": false, "node_type": "Operation"}, "exp_14": {"edges": [{"target": "reduce_sum_15", "dims": "(1, 8, 8, 32, 32)", "edge_data_id": 4566704784}, {"target": "div_17", "dims": "(1, 8, 8, 32, 32)", "edge_data_id": 4566704784}], "failed": false, "node_type": "Operation"}, "reduce_sum_15": {"edges": [{"target": "broadcast_in_dim_16", "dims": "(1, 8, 8, 32)", "edge_data_id": 4566706896}], "failed": false, "node_type": "Operation"}, "broadcast_in_dim_16": {"edges": [{"target": "div_17", "dims": "(1, 8, 8, 32, 1)", "edge_data_id": 4566707040}], "failed": false, "node_type": "Operation"}, "div_17": {"edges": [{"target": "dot_general_18", "dims": "(1, 8, 8, 32, 32)", "edge_data_id": 4566708816}], "failed": false, "node_type": "Operation"}, "dot_general_18": {"edges": [{"target": "transpose_19", "dims": "(8, 8, 16, 1, 32)", "edge_data_id": 4566710640}], "failed": false, "node_type": "Operation"}, "transpose_19": {"edges": [{"target": "transpose_20", "dims": "(1, 8, 32, 8, 16)", "edge_data_id": 4566711120}], "failed": false, "node_type": "Operation"}, "transpose_20": {"edges": [{"target": "reshape_21", "dims": "(8, 32, 8, 1, 16)", "edge_data_id": 4566709632}], "failed": false, "node_type": "Operation"}, "reshape_21": {"edges": [{"target": "dot_general_22", "dims": "(8, 32, 8, 16)", "edge_data_id": 4566559248}], "failed": false, "node_type": "Operation"}, "dot_general_22": {"edges": [{"target": "output_0", "dims": "(8, 32, 128)", "edge_data_id": 4566559536}], "failed": false, "node_type": "Operation"}, "output_0": {"edges": [], "failed": false, "node_type": "Output"}};
+    const module_info = {"scope_HeadParallelAttention_attention_query": {"type": "query", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention": {"type": "attention", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention": {"type": "HeadParallelAttention", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_key": {"type": "key", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_value": {"type": "value", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": {"type": "vmap(BTNH,BSNH->BNTS)", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_vmap__": {"type": "vmap()", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": {"type": "vmap(BNTS,BSNH->BTNH)", "parameters": {}, "attributes": {}}, "scope_HeadParallelAttention_attention_out": {"type": "out", "parameters": {}, "attributes": {}}};
+    const func_info = {"dot_general_1": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 8, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "dot_general_2": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 8, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "dot_general_3": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 128], "dtype": "float32"}, {"_type": "tensor", "shape": [128, 8, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2,), (0,)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}, "reshape_4": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 1, 16)", "dimensions": "None", "sharding": "None"}}, "dot_general_5": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 1, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((4,), (3,)), ((0, 2), (0, 2)))", "precision": "None", "preferred_element_type": "float32", "out_sharding": "None"}}, "mul_6": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 1, 32], "dtype": "float32"}, 0.25], "keyword_args": {"out_dtype": "None"}}, "reduce_max_7": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 1, 32], "dtype": "float32"}], "keyword_args": {"axes": "(np.int64(4),)", "out_sharding": "None"}}, "max_8": {"positional_args": [-Infinity, {"_type": "tensor", "shape": [8, 8, 32, 1], "dtype": "float32"}], "keyword_args": {}}, "transpose_9": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 1], "dtype": "float32"}], "keyword_args": {"permutation": "(3, 0, 1, 2)"}}, "broadcast_in_dim_10": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32], "dtype": "float32"}], "keyword_args": {"shape": "(1, 8, 8, 32, 1)", "broadcast_dimensions": "(0, np.int64(1), np.int64(2), np.int64(3))", "sharding": "None"}}, "stop_gradient_11": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32, 1], "dtype": "float32"}], "keyword_args": {}}, "transpose_12": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 32, 1, 32], "dtype": "float32"}], "keyword_args": {"permutation": "(3, 0, 1, 2, 4)"}}, "sub_13": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [1, 8, 8, 32, 1], "dtype": "float32"}], "keyword_args": {}}, "exp_14": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32, 32], "dtype": "float32"}], "keyword_args": {"accuracy": "None"}}, "reduce_sum_15": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32, 32], "dtype": "float32"}], "keyword_args": {"axes": "(np.int64(4),)", "out_sharding": "None"}}, "broadcast_in_dim_16": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32], "dtype": "float32"}], "keyword_args": {"shape": "(1, 8, 8, 32, 1)", "broadcast_dimensions": "(0, np.int64(1), np.int64(2), np.int64(3))", "sharding": "None"}}, "div_17": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 8, 32, 32], "dtype": "float32"}, {"_type": "tensor", "shape": [1, 8, 8, 32, 1], "dtype": "float32"}], "keyword_args": {}}, "dot_general_18": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [1, 8, 8, 32, 32], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((1,), (4,)), ((0, 2), (1, 2)))", "precision": "None", "preferred_element_type": "float32", "out_sharding": "None"}}, "transpose_19": {"positional_args": [{"_type": "tensor", "shape": [8, 8, 16, 1, 32], "dtype": "float32"}], "keyword_args": {"permutation": "(3, 0, 4, 1, 2)"}}, "transpose_20": {"positional_args": [{"_type": "tensor", "shape": [1, 8, 32, 8, 16], "dtype": "float32"}], "keyword_args": {"permutation": "(1, 2, 3, 0, 4)"}}, "reshape_21": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 1, 16], "dtype": "float32"}], "keyword_args": {"new_sizes": "(8, 32, 8, 16)", "dimensions": "None", "sharding": "None"}}, "dot_general_22": {"positional_args": [{"_type": "tensor", "shape": [8, 32, 8, 16], "dtype": "float32"}, {"_type": "tensor", "shape": [8, 16, 128], "dtype": "float32"}], "keyword_args": {"dimension_numbers": "(((2, 3), (0, 1)), ((), ()))", "precision": "None", "preferred_element_type": "None", "out_sharding": "None"}}};
+    const parent_module_to_nodes = {"scope_HeadParallelAttention_attention_query": ["dot_general_1"], "scope_HeadParallelAttention_attention": ["dot_general_1", "dot_general_2", "dot_general_3", "reshape_4", "dot_general_5", "mul_6", "reduce_max_7", "max_8", "transpose_9", "broadcast_in_dim_10", "stop_gradient_11", "transpose_12", "sub_13", "exp_14", "reduce_sum_15", "broadcast_in_dim_16", "div_17", "dot_general_18", "transpose_19", "transpose_20", "reshape_21", "dot_general_22"], "scope_HeadParallelAttention": ["dot_general_1", "dot_general_2", "dot_general_3", "reshape_4", "dot_general_5", "mul_6", "reduce_max_7", "max_8", "transpose_9", "broadcast_in_dim_10", "stop_gradient_11", "transpose_12", "sub_13", "exp_14", "reduce_sum_15", "broadcast_in_dim_16", "div_17", "dot_general_18", "transpose_19", "transpose_20", "reshape_21", "dot_general_22"], "scope_HeadParallelAttention_attention_key": ["dot_general_2"], "scope_HeadParallelAttention_attention_value": ["dot_general_3"], "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": ["dot_general_5"], "scope_HeadParallelAttention_attention_vmap__": ["mul_6", "reduce_max_7", "max_8", "transpose_9", "broadcast_in_dim_10", "stop_gradient_11", "transpose_12", "sub_13", "exp_14", "reduce_sum_15", "broadcast_in_dim_16", "div_17", "transpose_20"], "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": ["dot_general_18", "transpose_19"], "scope_HeadParallelAttention_attention_out": ["dot_general_22"]};
+    const parent_module_to_depth = {"scope_HeadParallelAttention_attention_query": 1, "scope_HeadParallelAttention_attention": 2, "scope_HeadParallelAttention": 3, "scope_HeadParallelAttention_attention_key": 1, "scope_HeadParallelAttention_attention_value": 1, "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": 1, "scope_HeadParallelAttention_attention_vmap__": 1, "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": 1, "scope_HeadParallelAttention_attention_out": 1};
+    const graph_node_name_to_without_suffix = {"input_0": "input", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_attention_query": "query", "scope_HeadParallelAttention_attention": "attention", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "scope_HeadParallelAttention_attention_key": "key", "dot_general_2": "dot_general", "scope_HeadParallelAttention_attention_value": "value", "dot_general_3": "dot_general", "reshape_4": "reshape", "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": "vmap(BTNH,BSNH->BNTS)", "dot_general_5": "dot_general", "scope_HeadParallelAttention_attention_vmap__": "vmap()", "mul_6": "mul", "reduce_max_7": "reduce_max", "max_8": "max", "transpose_9": "transpose", "broadcast_in_dim_10": "broadcast_in_dim", "stop_gradient_11": "stop_gradient", "transpose_12": "transpose", "sub_13": "sub", "exp_14": "exp", "reduce_sum_15": "reduce_sum", "broadcast_in_dim_16": "broadcast_in_dim", "div_17": "div", "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": "vmap(BNTS,BSNH->BTNH)", "dot_general_18": "dot_general", "transpose_19": "transpose", "transpose_20": "transpose", "reshape_21": "reshape", "scope_HeadParallelAttention_attention_out": "out", "dot_general_22": "dot_general", "output_0": "output"};
+    const graph_node_display_names = {"input_0": "input_0", "param_0": "param", "param_1": "param", "param_2": "param", "param_3": "param", "scope_HeadParallelAttention_attention_query": "query", "scope_HeadParallelAttention_attention": "attention", "scope_HeadParallelAttention": "HeadParallelAttention", "dot_general_1": "dot_general", "scope_HeadParallelAttention_attention_key": "key", "dot_general_2": "dot_general", "scope_HeadParallelAttention_attention_value": "value", "dot_general_3": "dot_general", "reshape_4": "reshape", "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": "vmap(BTNH,BSNH->BNTS)", "dot_general_5": "dot_general", "scope_HeadParallelAttention_attention_vmap__": "vmap()", "mul_6": "mul", "reduce_max_7": "reduce_max", "max_8": "max", "transpose_9": "transpose", "broadcast_in_dim_10": "broadcast_in_dim", "stop_gradient_11": "stop_gradient", "transpose_12": "transpose", "sub_13": "sub", "exp_14": "exp", "reduce_sum_15": "reduce_sum", "broadcast_in_dim_16": "broadcast_in_dim", "div_17": "div", "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": "vmap(BNTS,BSNH->BTNH)", "dot_general_18": "dot_general", "transpose_19": "transpose", "transpose_20": "transpose", "reshape_21": "reshape", "scope_HeadParallelAttention_attention_out": "out", "dot_general_22": "dot_general", "output_0": "output_0"};
     const node_to_attr_name = {};
-    const ancestor_map = {"param_0": "scope_HeadParallelAttention_query", "scope_HeadParallelAttention_query": "scope_HeadParallelAttention", "param_1": "scope_HeadParallelAttention_key", "scope_HeadParallelAttention_key": "scope_HeadParallelAttention", "param_2": "scope_HeadParallelAttention_value", "scope_HeadParallelAttention_value": "scope_HeadParallelAttention", "param_3": "scope_HeadParallelAttention_output", "scope_HeadParallelAttention_output": "scope_HeadParallelAttention", "dot_general_1": "scope_HeadParallelAttention_query", "sharding_constraint_2": "scope_HeadParallelAttention", "dot_general_3": "scope_HeadParallelAttention_key", "sharding_constraint_4": "scope_HeadParallelAttention", "dot_general_5": "scope_HeadParallelAttention_value", "sharding_constraint_6": "scope_HeadParallelAttention", "reshape_7": "scope_HeadParallelAttention", "transpose_8": "scope_HeadParallelAttention", "sharding_constraint_9": "scope_HeadParallelAttention", "reshape_10": "scope_HeadParallelAttention", "transpose_11": "scope_HeadParallelAttention", "sharding_constraint_12": "scope_HeadParallelAttention", "reshape_13": "scope_HeadParallelAttention", "transpose_14": "scope_HeadParallelAttention", "sharding_constraint_15": "scope_HeadParallelAttention", "attention_weights_16": "scope_HeadParallelAttention", "sharding_constraint_17": "scope_HeadParallelAttention", "dot_general_18": "scope_HeadParallelAttention_bhst_bhtd__bhsd", "scope_HeadParallelAttention_bhst_bhtd__bhsd": "scope_HeadParallelAttention", "sharding_constraint_19": "scope_HeadParallelAttention", "transpose_20": "scope_HeadParallelAttention", "reshape_21": "scope_HeadParallelAttention", "sharding_constraint_22": "scope_HeadParallelAttention", "dot_general_23": "scope_HeadParallelAttention_output"};
+    const ancestor_map = {"param_0": "scope_HeadParallelAttention_attention_query", "scope_HeadParallelAttention_attention_query": "scope_HeadParallelAttention_attention", "scope_HeadParallelAttention_attention": "scope_HeadParallelAttention", "param_1": "scope_HeadParallelAttention_attention_key", "scope_HeadParallelAttention_attention_key": "scope_HeadParallelAttention_attention", "param_2": "scope_HeadParallelAttention_attention_value", "scope_HeadParallelAttention_attention_value": "scope_HeadParallelAttention_attention", "param_3": "scope_HeadParallelAttention_attention_out", "scope_HeadParallelAttention_attention_out": "scope_HeadParallelAttention_attention", "dot_general_1": "scope_HeadParallelAttention_attention_query", "dot_general_2": "scope_HeadParallelAttention_attention_key", "dot_general_3": "scope_HeadParallelAttention_attention_value", "reshape_4": "scope_HeadParallelAttention_attention", "dot_general_5": "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_", "scope_HeadParallelAttention_attention_vmap_BTNH_BSNH__BNTS_": "scope_HeadParallelAttention_attention", "mul_6": "scope_HeadParallelAttention_attention_vmap__", "scope_HeadParallelAttention_attention_vmap__": "scope_HeadParallelAttention_attention", "reduce_max_7": "scope_HeadParallelAttention_attention_vmap__", "max_8": "scope_HeadParallelAttention_attention_vmap__", "transpose_9": "scope_HeadParallelAttention_attention_vmap__", "broadcast_in_dim_10": "scope_HeadParallelAttention_attention_vmap__", "stop_gradient_11": "scope_HeadParallelAttention_attention_vmap__", "transpose_12": "scope_HeadParallelAttention_attention_vmap__", "sub_13": "scope_HeadParallelAttention_attention_vmap__", "exp_14": "scope_HeadParallelAttention_attention_vmap__", "reduce_sum_15": "scope_HeadParallelAttention_attention_vmap__", "broadcast_in_dim_16": "scope_HeadParallelAttention_attention_vmap__", "div_17": "scope_HeadParallelAttention_attention_vmap__", "dot_general_18": "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_", "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_": "scope_HeadParallelAttention_attention", "transpose_19": "scope_HeadParallelAttention_attention_vmap_BNTS_BSNH__BTNH_", "transpose_20": "scope_HeadParallelAttention_attention_vmap__", "reshape_21": "scope_HeadParallelAttention_attention", "dot_general_22": "scope_HeadParallelAttention_attention_out"};
     const repeat_containers = new Set([]);
     const REPEAT_CONTAINER_COLOR = "#FA8334";
-    const collapse_modules_after_depth = 1;
+    const collapse_modules_after_depth = 2;
     const show_module_attr_names = false;
-    const node_to_module_path = {'dot_general_1': 'dot_general', 'sharding_constraint_2': 'sharding_constraint', 'dot_general_3': 'dot_general', 'sharding_constraint_4': 'sharding_constraint', 'dot_general_5': 'dot_general', 'sharding_constraint_6': 'sharding_constraint', 'reshape_7': 'reshape', 'transpose_8': 'transpose', 'sharding_constraint_9': 'sharding_constraint', 'reshape_10': 'reshape', 'transpose_11': 'transpose', 'sharding_constraint_12': 'sharding_constraint', 'reshape_13': 'reshape', 'transpose_14': 'transpose', 'sharding_constraint_15': 'sharding_constraint', 'attention_weights_16': 'jit', 'sharding_constraint_17': 'sharding_constraint', 'dot_general_18': 'dot_general', 'sharding_constraint_19': 'sharding_constraint', 'transpose_20': 'transpose', 'reshape_21': 'reshape', 'sharding_constraint_22': 'sharding_constraint', 'dot_general_23': 'dot_general'};
+    const node_to_module_path = {'dot_general_1': 'dot_general', 'dot_general_2': 'dot_general', 'dot_general_3': 'dot_general', 'reshape_4': 'reshape', 'dot_general_5': 'dot_general', 'mul_6': 'mul', 'reduce_max_7': 'reduce_max', 'max_8': 'max', 'transpose_9': 'transpose', 'broadcast_in_dim_10': 'broadcast_in_dim', 'stop_gradient_11': 'stop_gradient', 'transpose_12': 'transpose', 'sub_13': 'sub', 'exp_14': 'exp', 'reduce_sum_15': 'reduce_sum', 'broadcast_in_dim_16': 'broadcast_in_dim', 'div_17': 'div', 'dot_general_18': 'dot_general', 'transpose_19': 'transpose', 'transpose_20': 'transpose', 'reshape_21': 'reshape', 'dot_general_22': 'dot_general'};
     const generateImage = false;
     const generateSvg = false;
     const show_modular_view = false;
@@ -1024,10 +955,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
         
         const tooltip = document.createElement('div');
-        tooltip.className = !smaller ? `custom-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8` : `custom-tooltip_smaller_9f70ac7f-4c2b-4bde-afcd-90323b273ec8`;
+        tooltip.className = !smaller ? `custom-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc` : `custom-tooltip_smaller_c0fec43c-671e-4344-b20b-79accb4b2dbc`;
         tooltip.textContent = text;
         
-        const container = document.getElementById(`graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8`);
+        const container = document.getElementById(`graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc`);
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         
@@ -1039,7 +970,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const buttonRect = buttonElement.getBoundingClientRect();
         
         // Get the container's position in screen coordinates
-        const containerRect = document.getElementById(`graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8`).getBoundingClientRect();
+        const containerRect = document.getElementById(`graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc`).getBoundingClientRect();
         
         // Calculate position relative to container
         const buttonX = buttonRect.left + (buttonRect.width / 2) - containerRect.left;
@@ -1074,7 +1005,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const addCell = (text, isDimension = false) => {
             const cell = row.insertCell();
             cell.textContent = text;
-            if (isDimension) cell.className = "shape-dimension_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+            if (isDimension) cell.className = "shape-dimension_c0fec43c-671e-4344-b20b-79accb4b2dbc";
         };
 
         addCell(label ? "(" : "");
@@ -1138,7 +1069,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
     function appendShapeConnectorRow(table, partitions, axes) {
         const row = table.insertRow();
-        row.className = "shape-connectors_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+        row.className = "shape-connectors_c0fec43c-671e-4344-b20b-79accb4b2dbc";
 
         const heading = document.createElement("th");
         heading.scope = "row";
@@ -1158,7 +1089,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const width = Math.max(30, longestLine * 7 + 10);
             const center = width / 2;
             const cell = row.insertCell();
-            cell.className = "shape-dimension_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 shape-connector_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+            cell.className = "shape-dimension_c0fec43c-671e-4344-b20b-79accb4b2dbc shape-connector_c0fec43c-671e-4344-b20b-79accb4b2dbc";
 
             const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
             svg.setAttribute("width", width);
@@ -1225,7 +1156,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function positionShapeComparison(tooltip, anchorElement, zoomScale) {
-        const container = document.getElementById("graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+        const container = document.getElementById("graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc");
         const containerRect = container.getBoundingClientRect();
         tooltip.style.left = "0px";
         tooltip.style.top = "0px";
@@ -1253,14 +1184,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         removeTooltip();
 
         const tooltip = document.createElement("div");
-        tooltip.className = "shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+        tooltip.className = "shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc";
         const table = document.createElement("table");
         appendShapeRow(table, "global", shapeInfo.global);
         appendShapeConnectorRow(table, shapeInfo.partitions, shapeInfo.axes);
         appendShapeRow(table, "partitioned", shapeInfo.local);
         tooltip.appendChild(table);
 
-        const container = document.getElementById("graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+        const container = document.getElementById("graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc");
         container.appendChild(tooltip);
         currentTooltip = tooltip;
         tooltip.shapeAnchorElement = anchorElement;
@@ -1880,7 +1811,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function reloadGraph() {
-        d3.select("#graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").html("");
+        d3.select("#graph_c0fec43c-671e-4344-b20b-79accb4b2dbc").html("");
 
         if (generateImage) {
             renderGraphvizImage();
@@ -1947,16 +1878,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
     }
 
     function renderGraphvizImage() {
-        d3.select("#png-link-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").remove();
+        d3.select("#png-link-container_c0fec43c-671e-4344-b20b-79accb4b2dbc").remove();
         
         function showErrorMessage(error) {
-            const parent = d3.select("#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node().parentNode;
+            const parent = d3.select("#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc").node().parentNode;
             const errorContainer = d3.select(parent)
-                .insert("div", "#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
-                .attr("id", "png-error-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+                .insert("div", "#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc")
+                .attr("id", "png-error-container_c0fec43c-671e-4344-b20b-79accb4b2dbc");
             
             errorContainer.append("div")
-                .attr("id", "png-error-message_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                .attr("id", "png-error-message_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                 .html(`<strong>Error:</strong><br>${error.stack || error.message || error}<br><br><strong>Note:</strong> Exporting very large models as PNG is currently not supported. Use a non-PNG export_format (e.g. export_format=None for interactive display), or raise an issue on https://github.com/sachinhosmani/jaxviz/issues`);
         }
         
@@ -1994,21 +1925,21 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const pngUrl = URL.createObjectURL(pngBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node().parentNode;
+        const parent = d3.select("#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
-            .attr("id", "png-link-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+            .insert("div", "#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc")
+            .attr("id", "png-link-container_c0fec43c-671e-4344-b20b-79accb4b2dbc");
         
         linkContainer.append("a")
             .attr("href", pngUrl)
             .attr("target", "_blank")
-            .attr("id", "png-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("id", "png-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .text("View PNG in New Tab");
 
         linkContainer.append("a")
             .attr("href", pngUrl)
-            .attr("download", `jaxviz_graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.png`)
-            .attr("id", "png-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("download", `jaxviz_graph_c0fec43c-671e-4344-b20b-79accb4b2dbc.png`)
+            .attr("id", "png-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .text("Download PNG");
             
         URL.revokeObjectURL(svgUrl);
@@ -2029,26 +1960,26 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         const svgUrl = URL.createObjectURL(svgBlob);
         
         // Create link container
-        const parent = d3.select("#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node().parentNode;
+        const parent = d3.select("#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc").node().parentNode;
         const linkContainer = d3.select(parent)
-            .insert("div", "#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
-            .attr("id", "svg-link-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+            .insert("div", "#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc")
+            .attr("id", "svg-link-container_c0fec43c-671e-4344-b20b-79accb4b2dbc");
         
         linkContainer.append("a")
             .attr("href", svgUrl)
             .attr("target", "_blank")
-            .attr("id", "svg-download-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("id", "svg-download-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .text("View SVG in New Tab");
 
         linkContainer.append("a")
             .attr("href", svgUrl)
-            .attr("download", `jaxviz_graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8.svg`)
-            .attr("id", "svg-save-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("download", `jaxviz_graph_c0fec43c-671e-4344-b20b-79accb4b2dbc.svg`)
+            .attr("id", "svg-save-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .text("Download SVG");
     }
 
     function createGraph(graphvizData) {
-        const svg = d3.select("#graph_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        const svg = d3.select("#graph_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .append("svg")
         .attr("width", "100%")
         .attr("height", "100%")
@@ -2062,7 +1993,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             inner.attr("transform", event.transform);
             if (
                 currentTooltip &&
-                currentTooltip.classList.contains("shape-comparison-tooltip_9f70ac7f-4c2b-4bde-afcd-90323b273ec8") &&
+                currentTooltip.classList.contains("shape-comparison-tooltip_c0fec43c-671e-4344-b20b-79accb4b2dbc") &&
                 currentTooltip.shapeAnchorElement
             ) {
                 positionShapeComparison(
@@ -2080,7 +2011,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
         // Define arrowhead marker
         svg.append("defs").append("marker")
-        .attr("id", "arrowhead_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        .attr("id", "arrowhead_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 8)
         .attr("refY", 0)
@@ -2092,11 +2023,11 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .attr("fill", "#333");
 
         // Draw clusters (container boxes) first so they're behind nodes
-        const clusters = inner.selectAll(".boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        const clusters = inner.selectAll(".boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .data(Object.entries(graphvizData.clusters))
         .enter()
         .append("g")
-        .attr("class", "boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+        .attr("class", "boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc");
 
         const containersWithFailedNodes = identifyContainersWithFailedNodes(adj_list, ancestor_map);
 
@@ -2106,10 +2037,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             const hasFailedNodes = containersWithFailedNodes.has(clusterName);
             const isRepeat = isRepeatNode(clusterName);
             if (hasFailedNodes) {
-                group.classed("error_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                group.classed("error_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
             }
             if (isRepeat) {
-                group.classed("repeat-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                group.classed("repeat-container_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
             }
 
             // Parse bounding box coordinates
@@ -2151,13 +2082,13 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!isRepeatNode(clusterName)) {
                 // Add collapse/expand button
                 const collapseButton = group.append("circle")
-                .attr("class", "collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                .attr("class", "collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                 .attr("cx", x1 + 10)
                 .attr("cy", y1 + 10)
                 .attr("r", 5.5);
 
                 group.append("text")
-                .attr("class", "collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                .attr("class", "collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                 .attr("x", x1 + 10)
                 .attr("y", y1 + 10)
                 .attr("text-anchor", "middle")
@@ -2174,7 +2105,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add click event handler for collapse buttons
-        clusters.selectAll(".collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8, .collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        clusters.selectAll(".collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc, .collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .on("click", function(event, [clusterName, clusterData]) {
             event.stopPropagation(); // Prevent event from bubbling to SVG
             removeTooltip();
@@ -2189,19 +2120,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
         
         // Create edges using the path points from Graphviz
-        const edges = inner.selectAll(".edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        const edges = inner.selectAll(".edge_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .data(graphvizData.edges)
         .enter()
         .append("g")
-        .attr("class", "edge-group_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+        .attr("class", "edge-group_c0fec43c-671e-4344-b20b-79accb4b2dbc");
         
         // Add the actual path
         edges.append("path")
         .attr("class", function(edge) {
             if (edge.is_implied_edge) {
-                return "edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8 implied-edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+                return "edge_c0fec43c-671e-4344-b20b-79accb4b2dbc implied-edge_c0fec43c-671e-4344-b20b-79accb4b2dbc";
             }
-            return "edge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+            return "edge_c0fec43c-671e-4344-b20b-79accb4b2dbc";
         }).attr("d", function(edge) {
             if (edge.path && edge.path.length > 0) {
                     // Create a proper SVG path using Bézier curves
@@ -2227,7 +2158,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             }
             return "";
         })
-        .attr("marker-end", "url(#arrowhead_9f70ac7f-4c2b-4bde-afcd-90323b273ec8)");
+        .attr("marker-end", "url(#arrowhead_c0fec43c-671e-4344-b20b-79accb4b2dbc)");
         
         function drawTextEdgeLabel(labelGroup, edgeData) {
             const text = labelGroup.append("text")
@@ -2253,10 +2184,10 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             .attr("stroke-width", "0.5px");
 
             if (hasComparableShapeInfo(edgeData)) {
-                labelGroup.classed("has-shape-details_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                labelGroup.classed("has-shape-details_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
                 const badgeX = bbox.x + bbox.width + 5;
                 const badge = labelGroup.append("g")
-                .attr("class", "edge-shape-info-badge_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                .attr("class", "edge-shape-info-badge_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                 .attr("transform", `translate(${badgeX}, 0)`);
 
                 badge.append("circle").attr("r", 3.2);
@@ -2292,7 +2223,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (!pointAtStart) return;
             
             const labelGroup = edgeGroup.append("g")
-            .attr("class", "edge-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("class", "edge-label_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .attr("transform", `translate(${pointAtStart.x}, ${pointAtStart.y})`)
             .property("edgeLabelData", edgeData);
 
@@ -2304,7 +2235,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         edges.each(function() {
             const edgeGroup = d3.select(this);
             const path = edgeGroup.select("path");
-            const labelGroup = edgeGroup.select(".edge-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+            const labelGroup = edgeGroup.select(".edge-label_c0fec43c-671e-4344-b20b-79accb4b2dbc");
             const edgeData = labelGroup.property("edgeLabelData");
             const originalStrokeWidth = path.attr("stroke-width") || 1;
             const originalLabelTransform = labelGroup.attr("transform");
@@ -2345,19 +2276,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
 
         // Create nodes using positions from Graphviz
-        const nodes = inner.selectAll(".node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        const nodes = inner.selectAll(".node_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .data(Object.entries(graphvizData.nodes))
             .enter()
             .append("g")
             // In the createGraph function, when you're creating nodes, modify the class assignment:
             .attr("class", function([nodeName, nodeData]) {
-                let classes = "node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+                let classes = "node_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) classes += " error_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) classes += " input_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) classes += " module_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) classes += " output_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Operation")) classes += " operation_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                else if ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) classes += " constant_c0fec43c-671e-4344-b20b-79accb4b2dbc";
                 return classes;
             })
             .attr("transform", function([nodeName, nodeData]) {
@@ -2385,12 +2316,12 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("rx", nodeData.width / 2)
                 .attr("ry", nodeData.height / 2)
                 .attr("class", function() {
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    return "operation_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Input") return "input_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Output") return "output_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Constant") return "constant_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter") return "parameter_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    return "operation_c0fec43c-671e-4344-b20b-79accb4b2dbc";
                 });
             } else {
                 // Create rectangle
@@ -2400,15 +2331,15 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
                 .attr("class", function() { 
-                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
-                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" : "operation_9f70ac7f-4c2b-4bde-afcd-90323b273ec8";
+                    if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_c0fec43c-671e-4344-b20b-79accb4b2dbc";
+                    return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_c0fec43c-671e-4344-b20b-79accb4b2dbc" : "operation_c0fec43c-671e-4344-b20b-79accb4b2dbc";
                 });
             }
         });
         
         // Add labels for nodes
         nodes.append("text")
-        .attr("class", "node-label_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        .attr("class", "node-label_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .text(function([nodeName]) { return graph_node_display_names[nodeName] || graph_node_name_to_without_suffix[nodeName] || nodeName; })
         .attr("text-anchor", "middle")
         .attr("dominant-baseline", "central");
@@ -2417,7 +2348,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         nodes.filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")));
         }).append("text")
-        .attr("class", "type-indicator_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        .attr("class", "type-indicator_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .attr("text-anchor", "start")
         .attr("dominant-baseline", "text-bottom")
         .attr("transform", function([nodeName, nodeData]) {
@@ -2435,7 +2366,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         });
 
         // Add info buttons to nodes (except input, output, constant, parameter)
-        inner.selectAll(".node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        inner.selectAll(".node_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .filter(function([nodeName]) {
             return !(((adj_list[nodeName] && adj_list[nodeName].node_type === "Output")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Input")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Constant")) || ((adj_list[nodeName] && adj_list[nodeName].node_type === "Parameter")))
         })
@@ -2446,14 +2377,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
         // Add info button circle
         const infoButton = nodeGroup.append("circle")
-        .attr("class", "info-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        .attr("class", "info-button_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .attr("cx", width/2 - 7)
         .attr("cy", -height/2 + 7)
         .attr("r", 5.5);
 
         // Add info button icon
         nodeGroup.append("text")
-        .attr("class", "info-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        .attr("class", "info-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .attr("x", width/2 - 7)
         .attr("y", -height/2 + 8)
         .attr("text-anchor", "middle")
@@ -2469,16 +2400,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
         .on("mouseleave", removeTooltip);
 
         // Add click handler to info button
-            nodeGroup.selectAll(".info-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8, .info-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            nodeGroup.selectAll(".info-button_c0fec43c-671e-4344-b20b-79accb4b2dbc, .info-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .on("click", function(event) {
                 event.stopPropagation();
-                const infoButton = nodeGroup.select(".info-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node();
+                const infoButton = nodeGroup.select(".info-button_c0fec43c-671e-4344-b20b-79accb4b2dbc").node();
                 showPopupFromInfoButton.call(nodeGroup.node(), event, [nodeName], infoButton);
             });
         });
 
         // Add expand buttons to all module nodes (including non-expandable ones)
-        inner.selectAll(".node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+        inner.selectAll(".node_c0fec43c-671e-4344-b20b-79accb4b2dbc")
         .filter(function([nodeName]) {
             return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || collapsedContainers.has(nodeName)) && !isRepeatNode(nodeName);
         })
@@ -2500,7 +2431,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             // Add expand button circle
             const expandButton = nodeGroup.append("circle")
-            .attr("class", isExpandable ? "collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" : "collapse-button-disabled_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("class", isExpandable ? "collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc" : "collapse-button-disabled_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .attr("cx", -width / 2 + 7)
             .attr("cy", -height / 2 + 7)
             .attr("r", 5.5)
@@ -2509,7 +2440,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Add expand button icon
             nodeGroup.append("text")
-            .attr("class", isExpandable ? "collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8" : "collapse-icon-disabled_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+            .attr("class", isExpandable ? "collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc" : "collapse-icon-disabled_c0fec43c-671e-4344-b20b-79accb4b2dbc")
             .attr("x", -width / 2 + 7)
             .attr("y", -height / 2 + 7)
             .attr("text-anchor", "middle")
@@ -2529,7 +2460,7 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
 
             // Only add click handler for expandable modules
             if (isExpandable) {
-                nodeGroup.selectAll(".collapse-button_9f70ac7f-4c2b-4bde-afcd-90323b273ec8, .collapse-icon_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                nodeGroup.selectAll(".collapse-button_c0fec43c-671e-4344-b20b-79accb4b2dbc, .collapse-icon_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                 .on("click", function(event) {
                     event.stopPropagation();
                     removeTooltip();
@@ -2630,16 +2561,16 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                     .scale(currentTransform.k));
             }
 
-            clickedNodeElement.classed("highlight-node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+            clickedNodeElement.classed("highlight-node_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
             
             setTimeout(() => {
-                clickedNodeElement.classed("highlight-node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", false);
+                clickedNodeElement.classed("highlight-node_c0fec43c-671e-4344-b20b-79accb4b2dbc", false);
             }, 2000);
 
-            const popup = d3.select("#popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
-            const moduleTemplate = d3.select("#module-template_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
-            const tensorOpTemplate = d3.select("#tensor-op-template_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
-            const noInfoMessage = d3.select("#no-info_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+            const popup = d3.select("#popup_c0fec43c-671e-4344-b20b-79accb4b2dbc");
+            const moduleTemplate = d3.select("#module-template_c0fec43c-671e-4344-b20b-79accb4b2dbc");
+            const tensorOpTemplate = d3.select("#tensor-op-template_c0fec43c-671e-4344-b20b-79accb4b2dbc");
+            const noInfoMessage = d3.select("#no-info_c0fec43c-671e-4344-b20b-79accb4b2dbc");
             
             const nodeData = adj_list[nodeName];
             
@@ -2647,14 +2578,14 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             if (node_to_module_path[nodeName] && graph_node_name_to_without_suffix[nodeName]) {
                 popupTitle = node_to_module_path[nodeName] + "." + graph_node_name_to_without_suffix[nodeName];
             }
-            d3.select("#popup-title_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").text(popupTitle);
+            d3.select("#popup-title_c0fec43c-671e-4344-b20b-79accb4b2dbc").text(popupTitle);
 
             // Show attribute name if available
             const attrName = node_to_attr_name[nodeName];
-            const attrNameRow = d3.select("#attr-name-row_9f70ac7f-4c2b-4bde-afcd-90323b273ec8");
+            const attrNameRow = d3.select("#attr-name-row_c0fec43c-671e-4344-b20b-79accb4b2dbc");
 
             if (attrName) {
-                d3.select("#attr-name-value_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").text(attrName);
+                d3.select("#attr-name-value_c0fec43c-671e-4344-b20b-79accb4b2dbc").text(attrName);
                 attrNameRow.style("display", "block");
             } else {
                 attrNameRow.style("display", "none");
@@ -2666,31 +2597,31 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             
             if (module_info[nodeName]) {
                 const info = module_info[nodeName];
-                moduleTemplate.style("display", "block").classed("content-shown_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                moduleTemplate.style("display", "block").classed("content-shown_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
                 
-                d3.select("#module-extra-repr_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").text(info.extra_repr || 'N/A');
+                d3.select("#module-extra-repr_c0fec43c-671e-4344-b20b-79accb4b2dbc").text(info.extra_repr || 'N/A');
 
                 const forward_info = func_info[nodeName];
-                const attributesContainer = d3.select("#module-attributes_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node();
+                const attributesContainer = d3.select("#module-attributes_c0fec43c-671e-4344-b20b-79accb4b2dbc").node();
                 attributesContainer.innerHTML = '';
                 createJsonViewer(attributesContainer, info.attributes);
 
-                const parametersContainer = d3.select("#module-parameters_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node();
+                const parametersContainer = d3.select("#module-parameters_c0fec43c-671e-4344-b20b-79accb4b2dbc").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, forward_info);
             } else if (!(adj_list[nodeName] && adj_list[nodeName].node_type === "Input") && func_info[nodeName]) {
                 const info = func_info[nodeName];
-                tensorOpTemplate.style("display", "block").classed("content-shown_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
-                const parametersContainer = d3.select("#tensor-op-parameters_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node();
+                tensorOpTemplate.style("display", "block").classed("content-shown_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
+                const parametersContainer = d3.select("#tensor-op-parameters_c0fec43c-671e-4344-b20b-79accb4b2dbc").node();
                 parametersContainer.innerHTML = '';
                 createJsonViewer(parametersContainer, info);
             } else {
-                noInfoMessage.style("display", "block").classed("content-shown_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                noInfoMessage.style("display", "block").classed("content-shown_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
             }
             
             // Position popup based on info button or node center
             let boundingBox, x, y;
-            const containerRect = d3.select("#graph-container_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node().getBoundingClientRect();
+            const containerRect = d3.select("#graph-container_c0fec43c-671e-4344-b20b-79accb4b2dbc").node().getBoundingClientRect();
             
             if (infoButtonElement) {
                 boundingBox = infoButtonElement.getBoundingClientRect();
@@ -2706,19 +2637,19 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
             popup.style("left", `${x}px`)
             .style("top", `${y}px`)
             .style("display", "flex");
-            d3.select("#popup-content_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").node().scrollTop = 0;
+            d3.select("#popup-content_c0fec43c-671e-4344-b20b-79accb4b2dbc").node().scrollTop = 0;
         }
 
         function closePopup() {
-            d3.select("#popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").style("display", "none");
+            d3.select("#popup_c0fec43c-671e-4344-b20b-79accb4b2dbc").style("display", "none");
         }
         
-        d3.select(".popup-close_9f70ac7f-4c2b-4bde-afcd-90323b273ec8").on("click", closePopup);
+        d3.select(".popup-close_c0fec43c-671e-4344-b20b-79accb4b2dbc").on("click", closePopup);
         svg.on("click", closePopup);
 
-        const popup = document.getElementById(`popup_9f70ac7f-4c2b-4bde-afcd-90323b273ec8`);
+        const popup = document.getElementById(`popup_c0fec43c-671e-4344-b20b-79accb4b2dbc`);
         const resizeObserver = new ResizeObserver(() => {
-            const editorContainers = popup.querySelectorAll('.json-viewer_9f70ac7f-4c2b-4bde-afcd-90323b273ec8');
+            const editorContainers = popup.querySelectorAll('.json-viewer_c0fec43c-671e-4344-b20b-79accb4b2dbc');
             for (let container of editorContainers) {
                 if (container.jsonEditor) {
                     container.jsonEditor.resize();
@@ -2797,30 +2728,30 @@ i._setHSLA(null,e,1-t)}),this.settings.alpha&&a(r,this._domA,function(e,t){i._se
                 // Apply highlight effect to the target container
                 if (Object.keys(graphvizData.nodes).includes(lastModifiedContainer)) {
                     // Highlight the node (collapsed container)
-                    const targetElement = inner.selectAll(".node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                    const targetElement = inner.selectAll(".node_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                         .filter(([nodeName]) => nodeName === lastModifiedContainer);
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                        targetElement.classed("highlight-node_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-node_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", false);
+                            targetElement.classed("highlight-node_c0fec43c-671e-4344-b20b-79accb4b2dbc", false);
                         }, 2000); // Match the animation duration
                     }
                 } else if (Object.keys(graphvizData.clusters).includes(lastModifiedContainer)) {
                     // Highlight the cluster (expanded container)
-                    const targetElement = inner.selectAll(".boundary-box_9f70ac7f-4c2b-4bde-afcd-90323b273ec8")
+                    const targetElement = inner.selectAll(".boundary-box_c0fec43c-671e-4344-b20b-79accb4b2dbc")
                         .filter(function([clusterName]) {
                             return clusterName === lastModifiedContainer;
                         });
                         
                     if (!targetElement.empty()) {
-                        targetElement.classed("highlight-cluster_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", true);
+                        targetElement.classed("highlight-cluster_c0fec43c-671e-4344-b20b-79accb4b2dbc", true);
                         
                         // Remove the highlight class after animation completes
                         setTimeout(() => {
-                            targetElement.classed("highlight-cluster_9f70ac7f-4c2b-4bde-afcd-90323b273ec8", false);
+                            targetElement.classed("highlight-cluster_c0fec43c-671e-4344-b20b-79accb4b2dbc", false);
                         }, 2000); // Match the animation duration
                     }
                 }
