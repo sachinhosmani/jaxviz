@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
+from jaxviz import _module_scope_context
 from jaxviz.jaxpr_to_graph import build_graph
 
 
@@ -17,7 +18,10 @@ def _mlp_blobs():
     model = MLP()
     x = jnp.ones((1, 8))
     params = model.init(jax.random.PRNGKey(0), x)
-    return build_graph(jax.make_jaxpr(lambda x: model.apply(params, x))(x))
+    forward = lambda value: model.apply(params, value)
+    with _module_scope_context(forward):
+        closed_jaxpr = jax.make_jaxpr(forward)(x)
+    return build_graph(closed_jaxpr)
 
 
 def test_has_input_and_output_nodes():
@@ -39,9 +43,13 @@ def test_container_ids_are_dot_safe():
 
 
 def test_dense_ops_nest_under_a_top_level_module():
-    ancestor_map = _mlp_blobs()["ancestor_map"]
+    blobs = _mlp_blobs()
+    ancestor_map = blobs["ancestor_map"]
     roots = {parent for parent in ancestor_map.values() if parent not in ancestor_map}
-    assert any("MLP" in root for root in roots)
+    assert any(
+        blobs["graph_node_display_names"].get(root) == "MLP"
+        for root in roots
+    )
 
 
 def test_flat_graph_when_no_named_scopes():

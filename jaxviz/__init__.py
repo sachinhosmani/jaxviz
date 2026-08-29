@@ -24,22 +24,29 @@ _VIEWS = (VIEW_GLOBAL, VIEW_PER_DEVICE)
 
 
 def _module_scope_context(fn):
-    """Return a context manager that adds module nesting for object-based models
-    that do not emit named scopes on their own.
-
-    Flax NNX modules are plain objects and produce a flat jaxpr; passing the module
-    directly lets us walk it and inject ``jax.named_scope``s so submodules render as
-    nested containers. Anything else (Flax Linen closures, raw functions) is traced
-    unchanged.
-    """
+    """Return the explicit module-invocation adapter for this trace."""
     try:
         from flax import nnx
+        if isinstance(fn, nnx.Module):
+            from .adapters.nnx import named_scopes
+            return named_scopes(fn)
     except ImportError:
-        return contextlib.nullcontext()
+        pass
 
-    if isinstance(fn, nnx.Module):
-        from .adapters.nnx import named_scopes
-        return named_scopes(fn)
+    try:
+        import equinox as eqx
+        if isinstance(fn, eqx.Module):
+            from .adapters.equinox import named_scopes
+            return named_scopes(fn)
+    except ImportError:
+        pass
+
+    try:
+        from .adapters.linen import named_scopes
+        return named_scopes()
+    except ImportError:
+        pass
+
     return contextlib.nullcontext()
 
 
@@ -53,14 +60,19 @@ def _lower_for_hlo(fn, example_args):
         nnx = None
 
     if nnx is not None and isinstance(fn, nnx.Module):
+        from .adapters.nnx import named_scopes
+
         graphdef, state = nnx.split(fn)
 
         def forward(state, *args):
-            return nnx.merge(graphdef, state)(*args)
+            model = nnx.merge(graphdef, state)
+            with named_scopes(model):
+                return model(*args)
 
         return jax.jit(forward).lower(state, *example_args)
 
-    return jax.jit(fn).lower(*example_args)
+    with _module_scope_context(fn):
+        return jax.jit(fn).lower(*example_args)
 
 
 def _global_jaxpr_for_hlo(fn, example_args):

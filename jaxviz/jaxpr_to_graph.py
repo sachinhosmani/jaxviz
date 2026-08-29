@@ -4,9 +4,9 @@ A jaxpr is already a dataflow DAG: each equation is a primitive with SSA-named
 input/output variables, so edges follow directly from variable dependencies, and
 every variable carries a static shape and dtype (its ``aval``).
 
-Nesting comes from each equation's ``name_stack`` (e.g. ``MLP/Dense_0``). Frameworks
-that use named scopes (Flax Linen, Haiku) populate it; those that do not (raw JAX,
-Equinox, NNX) produce a flat graph.
+Nesting comes only from JAXViz's tagged module-invocation scopes. Framework
+adapters add those scopes while tracing; transformation and compiler scopes remain
+operation metadata and never become collapsible modules.
 
 Only leaf nodes are emitted into ``adj_list``; the frontend synthesizes the
 collapsible module containers from ``ancestor_map``.
@@ -14,7 +14,6 @@ collapsible module containers from ``ancestor_map``.
 import re
 from collections import defaultdict
 
-import jax
 from jax import core as jax_core
 
 try:  # jax >= ~0.5 moved these out of the public jax.core namespace
@@ -25,6 +24,8 @@ except AttributeError:
 
 from .enums import NodeType
 from .graph_transforms import build_immediate_ancestor_map
+from .hierarchy import validate_collapsible_hierarchy
+from ._module_scopes import module_path_from_name_stack
 
 
 def _shape_str(aval):
@@ -37,14 +38,9 @@ def _shape_str(aval):
 
 
 def _scope_parts(eqn):
-    """Return the name_stack of an equation as a list of scope names, root last.
-
-    e.g. name_stack 'MLP/Dense_0' -> ['Dense_0', 'MLP']  (immediate parent first).
-    Empty name_stack -> [] (node lives at top level, no nesting).
-    """
-    ns = str(getattr(eqn.source_info, "name_stack", "") or "")
-    parts = [p for p in ns.split("/") if p]
-    return parts
+    return module_path_from_name_stack(
+        getattr(eqn.source_info, "name_stack", None)
+    )
 
 
 def _safe_id(s):
@@ -57,17 +53,13 @@ def _safe_id(s):
 
 
 def _scope_containers(parts):
-    """Turn ['MLP', 'Dense_0'] (root first) into [(container_id, label), ...],
-    immediate-first.
-
-    container_id is DOT-safe and unique to the cumulative path (so distinct scopes
-    never collide); label is the human name of that scope level.
-      ['MLP', 'Dense_0'] -> [('scope_MLP_Dense_0', 'Dense_0'), ('scope_MLP', 'MLP')]
-    """
+    """Build uniquely identified containers from module invocations."""
     levels = []
     for i in range(1, len(parts) + 1):
-        cid = "scope_" + _safe_id("/".join(parts[:i]))
-        levels.append((cid, parts[i - 1]))
+        cid = "scope_" + _safe_id("/".join(
+            part.identity for part in parts[:i]
+        ))
+        levels.append((cid, parts[i - 1].name))
     return levels[::-1]  # immediate parent first, root last
 
 
@@ -159,6 +151,7 @@ def build_graph(closed_jaxpr, show_constants=False):
             module_info[cid] = {"type": without, "parameters": {}, "attributes": {}}
 
     seen_edges = set()
+    assigned_parameter_scopes = set()
 
     def add_edge(src_node, dst_node, var):
         # edge_data_id identifies the *tensor* (the jaxpr Var, shared across all its
@@ -220,15 +213,22 @@ def build_graph(closed_jaxpr, show_constants=False):
             adj_list[node] = {"edges": [], "failed": False, "node_type": NodeType.PARAMETER.value}
             graph_node_display_names[node] = "param"
             graph_node_name_to_without_suffix[node] = "param"
-        # Ancestors are assigned lazily to the scope of the first consuming eqn,
-        # so weights/constants nest inside the module that uses them.
+        # Parameter ancestry is narrowed to the common scope of all consumers.
         node_to_ancestors[node] = []
         var_to_source[var] = node
 
     def maybe_assign_param_scope(src_node, container_ids):
-        if (src_node.startswith("param_") or src_node.startswith("const_")) \
-                and not node_to_ancestors.get(src_node):
+        if not (src_node.startswith("param_") or src_node.startswith("const_")):
+            return
+        if src_node not in assigned_parameter_scopes:
             node_to_ancestors[src_node] = list(container_ids)
+            assigned_parameter_scopes.add(src_node)
+            return
+        common = set(node_to_ancestors[src_node]).intersection(container_ids)
+        node_to_ancestors[src_node] = [
+            container for container in node_to_ancestors[src_node]
+            if container in common
+        ]
 
     # --- Equations become leaf nodes ---
     for eqn in jaxpr.eqns:
@@ -295,6 +295,7 @@ def build_graph(closed_jaxpr, show_constants=False):
             add_edge(src, node, outvar)
 
     ancestor_map = build_immediate_ancestor_map(node_to_ancestors, adj_list)
+    validate_collapsible_hierarchy(adj_list, ancestor_map, module_info)
 
     return {
         "adj_list": adj_list,

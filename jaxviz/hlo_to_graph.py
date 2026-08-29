@@ -6,18 +6,11 @@ select the module by content (earliest dump containing a collective). Logical sh
 come from the propagated HLO when available, with a conservative global-jaxpr
 fallback for Shardy versions that do not emit that HLO stage.
 
-Attribution uses ONLY first-party metadata:
-  * op_name scopes (e.g. jit(forward)/jit(relu)/max  ->  label "relu")
-  * the HLO stack-frame source-location index (file/function/line/column),
-    which maps each op to the exact call site in the user's model code
-  * for weights, the pytree path in op_name (state['dense0']['kernel'].value)
-
-Module nesting is derived from the stack-frame chain: each `X.__call__` frame is a
-module boundary, and the attribute name (dense0/dense1) is read from the *source
-line* at the call-site column recorded in the frame table. If a node has no
-reliable frame/scope, it is left top-level (unattributed) rather than guessed.
+Collapsible hierarchy comes exclusively from tagged module-invocation scopes added
+by framework adapters. JIT, vmap, arbitrary named scopes, compiler provenance, and
+source frames never become modules. Stack frames remain available only for source
+location and global-shape matching. Weight names come from their pytree paths.
 """
-import ast
 import glob
 import os
 import re
@@ -25,6 +18,8 @@ import tempfile
 from collections import defaultdict
 
 from .enums import NodeType
+from .hierarchy import validate_collapsible_hierarchy
+from ._module_scopes import parse_module_scope
 
 COLLECTIVE_OPCODES = {
     "all-reduce", "all-gather", "all-to-all", "reduce-scatter",
@@ -501,103 +496,59 @@ class _StackFrameIndex:
         return out
 
 
-# --------------------------------------------------------------------------
-# Source reader: recover the attribute name at a call site (dense0/dense1)
-# Location comes from XLA's frame table; source is the user's own file.
-# Parsed with `ast`, no regex guessing on the source.
-# --------------------------------------------------------------------------
-class _SourceResolver:
-    def __init__(self):
-        self._lines_cache = {}
-
-    def _lines(self, path):
-        if path not in self._lines_cache:
-            try:
-                with open(path) as f:
-                    self._lines_cache[path] = f.read().splitlines()
-            except OSError:
-                self._lines_cache[path] = None
-        return self._lines_cache[path]
-
-    def attr_at(self, file, line, column):
-        """Return the attribute name of the call whose expression starts at
-        (line, column): for `self.dense0(x)` -> 'dense0'; for `nnx.relu(x)`
-        -> None (not a self attribute -> not a submodule instance).
-        Returns None on any uncertainty."""
-        lines = self._lines(file)
-        if not lines or not (1 <= line <= len(lines)):
-            return None
-        src = lines[line - 1]
-        # find the smallest Call node whose func starts at the given column
-        try:
-            tree = ast.parse(src.strip())
-        except SyntaxError:
-            return None
-        target_col = column - (len(src) - len(src.lstrip()))
-        best = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                fcol = getattr(node.func, "col_offset", None)
-                if fcol is None:
-                    continue
-                if abs(fcol - target_col) <= 1:
-                    best = node.func
-                    break
-        if best is None:
-            return None
-        # self.dense0(...)  -> Attribute(value=Name('self'), attr='dense0')
-        if isinstance(best, ast.Attribute) and isinstance(best.value, ast.Name) \
-                and best.value.id == "self":
-            return best.attr
-        return None
+def _common_module_prefix(paths):
+    if not paths:
+        return []
+    prefix = list(paths[0])
+    for path in paths[1:]:
+        shared_length = 0
+        for left, right in zip(prefix, path):
+            if left != right:
+                break
+            shared_length += 1
+        prefix = prefix[:shared_length]
+    return prefix
 
 
-# --------------------------------------------------------------------------
-# op_name -> clean op label   (jit(forward)/jit(relu)/max -> relu)
-# --------------------------------------------------------------------------
-def _opname_scopes(op_name, wrapper=None):
-    """The jit(<name>) scope segments in op_name (e.g. jit(forward)/jit(relu)/max
-    -> ['relu']), minus the outer wrapper (the lowered fn, here 'forward').
+def _module_path_from_op_name(op_name):
+    """Read explicit module-invocation scopes from HLO metadata.
 
-    These scopes are JAX's own recorded function names and act as *containers*:
-    a compound op like relu lowers to several primitives (broadcast, maximum) that
-    all share the jit(relu) scope, so we nest them under a 'relu' box and keep each
-    primitive's real opcode as its label — rather than mislabeling them 'relu'.
-    Bare primitives (dot, add) have no jit(<name>) scope and stay un-nested."""
+    An HLO operation can carry several semicolon-separated provenance paths. A
+    module path is authoritative only when every provenance path contains tagged
+    scopes; when paths differ, retain only their common module ancestry.
+    """
     if not op_name:
         return []
-    names = re.findall(r"jit\(([^)]+)\)", op_name)   # e.g. ["forward", "relu"]
-    if wrapper is not None:
-        names = [n for n in names if n != wrapper]
-    return names
 
-
-# --------------------------------------------------------------------------
-# Module path from the frame chain.
-# Each `Class.__call__` frame is a module boundary; the submodule *name* is
-# read from the source at the call-site column of the frame ONE LEVEL DOWN
-# the stack (the caller that invoked that __call__).
-# --------------------------------------------------------------------------
-def _module_path_from_frames(frames, src, user_files):
-    """frames: innermost-first list of (file, func, line, col).
-    Returns module names (outermost first), or [] if none resolvable.
-
-    A submodule instance is invoked as `self.<name>(...)` in user code, and each
-    such call is a frame in the op's stack. So we read the attribute name at each
-    *user* frame's recorded (line, column): a frame that sits on `self.dense0(x)`
-    yields 'dense0'; a frame on a plain function call (`nnx.relu(x)`) yields None
-    and is skipped (relu is not a submodule instance, so it stays un-nested).
-    Nested submodules (`self.block(x)` -> `self.dense0(x)`) produce a multi-level
-    path. Anything unreadable is skipped rather than guessed.
-    """
-    path = []
-    for (f, fn, ln, col) in frames:   # innermost first
-        if f not in user_files:
+    paths = []
+    for provenance in op_name.split(";"):
+        if not provenance:
             continue
-        attr = src.attr_at(f, ln, col)
-        if attr:
-            path.append(attr)
-    return list(reversed(path))       # outermost first
+        path = [
+            scope
+            for segment in provenance.split("/")
+            if (scope := parse_module_scope(segment)) is not None
+        ]
+        if not path:
+            return []
+        paths.append(path)
+    return _common_module_prefix(paths)
+
+
+def _assign_value_module_paths(adj_list, node_modpath):
+    """Place constants and parameters at the common scope of all direct uses."""
+    value_types = {
+        NodeType.CONSTANT.value,
+        NodeType.PARAMETER.value,
+    }
+    for node_id, data in adj_list.items():
+        if data["node_type"] not in value_types or not data["edges"]:
+            continue
+        consumer_paths = [
+            node_modpath.get(edge["target"], [])
+            for edge in data["edges"]
+        ]
+        node_modpath[node_id] = _common_module_prefix(consumer_paths)
 
 
 # --------------------------------------------------------------------------
@@ -615,7 +566,6 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
     }
     out_global = _propagated_output(propagated)
     sfi = _StackFrameIndex(text)
-    src = _SourceResolver()
     user_files = {f for f in sfi.files.values()
                   if not f.startswith("<") and "site-packages" not in f
                   and "dist-packages" not in f}
@@ -629,40 +579,12 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
     name_to_node, out_shape, pending_edges = {}, {}, []
     const_values = {}  # node_id -> raw scalar value (for scalar constants)
     node_global = {}   # node_id -> global (logical) output shape, when known
-    node_modpath = {}  # node_id -> list[str] (outermost first) or []
+    node_modpath = {}
 
     def add_node(node_id, node_type, label, without=None):
         adj_list[node_id] = {"edges": [], "failed": False, "node_type": node_type}
         graph_node_display_names[node_id] = label
         graph_node_name_to_without_suffix[node_id] = without or label
-
-    # The outer wrapper is the first jit(<name>) segment shared by ops
-    # (here 'forward', from the lowered fn). Detect it instead of hardcoding.
-    wrapper = None
-    for ln in body:
-        on = _OP_NAME_RE.search(ln)
-        if on:
-            outer = re.match(r"jit\(([^)]+)\)", on.group(1))
-            if outer:
-                wrapper = outer.group(1)
-                break
-
-    # The root container is the model's top module: the outermost user-code
-    # `<Class>.__call__` frame (e.g. MLP), so the whole graph nests under it like
-    # the global graph does. Detected once from any op's frame chain.
-    root_class = None
-    for ln in body:
-        sid_m = _STACK_ID_RE.search(ln)
-        if not sid_m:
-            continue
-        frames = sfi.resolve(int(sid_m.group(1)))
-        for (f, fn, l, c) in reversed(frames):   # outermost first
-            if f in user_files and fn.endswith(".__call__"):
-                root_class = fn[:-len(".__call__")]
-                break
-        if root_class:
-            break
-    root_prefix = [root_class] if root_class else []
 
     # ---- pass 1: parameters (op_name carries input name or state[...] path) ----
     param_meta = {}
@@ -682,7 +604,7 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
             # a weight: type Parameter, label from the pytree path, nest by it
             leaf = ".".join(state_path)  # dense0.kernel
             add_node(node_id, NodeType.PARAMETER.value, leaf, "param")
-            node_modpath[node_id] = root_prefix + state_path[:-1]  # e.g. [MLP, dense0]
+            node_modpath[node_id] = []
             node_to_attr_name[node_id] = state_path[-1]
         elif opname and "/" not in opname and not opname.startswith("jit("):
             # a genuine forward input (args[0])
@@ -717,8 +639,7 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
 
         operand_str, _, attr_tail = rest.partition(")")
 
-        # Label every op by its real (low-level) opcode. Friendly names like relu
-        # are represented as *containers* (via op_name scopes), not labels.
+        # Label every operation by its real low-level opcode.
         if opcode == "constant":
             add_node(node_id, NodeType.CONSTANT.value, "constant", "constant")
             dtype, dims = _hlo_shape_parts(shape)
@@ -742,15 +663,10 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
             "keyword_args": _parse_hlo_attrs(attr_tail),
         }
 
-        # Container path = root module (MLP) + submodule from stack frames
-        # (dense0/dense1, via self.<attr>) + op_name scope (relu). All from
-        # first-party metadata; anything unresolved is simply omitted.
-        sub_path = []
         node_loc = None
         node_source = None
         if sid_m := _STACK_ID_RE.search(ln):
             frames = sfi.resolve(int(sid_m.group(1)))
-            sub_path = _module_path_from_frames(frames, src, user_files)
             for f, fn, l, c in frames:
                 if f in user_files:
                     node_loc = (l, c)
@@ -790,8 +706,8 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
             if fallback is not None:
                 node_global[node_id] = fallback
 
-        scope_path = _opname_scopes(op_name, wrapper)
-        node_modpath[node_id] = root_prefix + sub_path + scope_path
+        explicit_module_path = _module_path_from_op_name(op_name)
+        node_modpath[node_id] = explicit_module_path
 
         if ln.lstrip().startswith("ROOT"):
             root_name = name
@@ -820,6 +736,8 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
         seen.add((src_node, dst_node))
         adj_list[src_node]["edges"].append(_edge(src_node, dst_node))
 
+    _assign_value_module_paths(adj_list, node_modpath)
+
     if root_name is not None:
         add_node("output_0", NodeType.OUTPUT.value, "output_0", "output")
         node_modpath["output_0"] = []
@@ -839,6 +757,7 @@ def build_hlo_graph(lowered, mesh_shape=None, global_jaxpr=None):
     # ---- build the module containers from node_modpath ----
     (ancestor_map, parent_module_to_nodes, parent_module_to_depth,
      module_info, node_to_module_path) = _build_hierarchy(node_modpath, adj_list)
+    validate_collapsible_hierarchy(adj_list, ancestor_map, module_info)
 
     # A container's display label is its module name (dense1), not its raw id
     # (mod_MLP_dense1) — mirror what the global graph registers.
@@ -870,8 +789,7 @@ def _state_path(op_name):
 
 
 def _build_hierarchy(node_modpath, adj_list):
-    """Turn per-node module paths (outermost first) into the nesting blobs.
-    Module container ids are 'mod::dense0', 'mod::dense0/inner', etc."""
+    """Turn explicit invocation paths into frontend hierarchy data."""
     ancestor_map = {}
     parent_module_to_nodes = defaultdict(list)
     parent_module_to_depth = {}
@@ -879,13 +797,15 @@ def _build_hierarchy(node_modpath, adj_list):
     node_to_module_path = {}
 
     def mod_id(path):
-        # Must be DOT-safe (the frontend renders via Graphviz): ':' and '/' are
-        # special in DOT, so sanitize like the high-level graph's container ids.
-        return "mod_" + _safe_id("/".join(path))
+        return "mod_" + _safe_id("/".join(
+            scope.identity for scope in path
+        ))
 
     all_module_paths = set()
     for node_id, path in node_modpath.items():
-        node_to_module_path[node_id] = "/".join(path) if path else ""
+        node_to_module_path[node_id] = "/".join(
+            scope.name for scope in path
+        ) if path else ""
         for i in range(1, len(path) + 1):
             all_module_paths.add(tuple(path[:i]))
 
@@ -894,7 +814,11 @@ def _build_hierarchy(node_modpath, adj_list):
         mid = mod_id(list(path))
         depth = len(path) - 1
         parent_module_to_depth[mid] = depth
-        module_info[mid] = {"name": path[-1], "path": "/".join(path), "depth": depth}
+        module_info[mid] = {
+            "name": path[-1].name,
+            "path": "/".join(scope.name for scope in path),
+            "depth": depth,
+        }
         if len(path) == 1:
             ancestor_map[mid] = None
         else:
