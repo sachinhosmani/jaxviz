@@ -23,7 +23,7 @@ from jaxviz import trace_model
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = PROJECT_ROOT / "examples"
-GENERATED_DIR = EXAMPLES_DIR / "generated"
+OUTPUT_DIR = PROJECT_ROOT / "docs" / "examples"
 METADATA_VARS = {
     "code_contents",
     "description",
@@ -187,7 +187,7 @@ def generate_example(path, selected_views=None):
     with trace_context:
         for view in views:
             suffix = f"_{view}" if len(getattr(module, "views", ("global",))) > 1 else ""
-            output_path = GENERATED_DIR / f"{path.stem}{suffix}.html"
+            output_path = OUTPUT_DIR / f"{path.stem}{suffix}.html"
             print(f"Generating {path.stem} ({view})...")
             graph_html = trace_model(
                 model,
@@ -219,7 +219,7 @@ def generate_all(example_names=None, selected_views=None):
         except RuntimeError:
             pass
 
-    GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     requested_names = set(example_names or ())
     available_paths = {
         path.stem: path for path in sorted(EXAMPLES_DIR.glob("*.py"))

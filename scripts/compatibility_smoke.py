@@ -29,6 +29,15 @@ def version(distribution):
         return "not installed"
 
 
+def version_at_least(distribution, minimum):
+    parts = version(distribution).split(".")[:len(minimum)]
+    try:
+        current = tuple(int(part) for part in parts)
+    except ValueError:
+        return False
+    return current >= minimum
+
+
 def require(condition, message):
     if not condition:
         raise AssertionError(message)
@@ -216,6 +225,16 @@ def smoke_distributed_examples(examples_dir):
                     require('"status": "verified"' in html, "{} lacks verified shapes".format(
                         example_name
                     ))
+                    require("all-reduce" in html, "{} lacks its expected all-reduce".format(
+                        example_name
+                    ))
+                    require('"name": "model"' in html, "{} lacks model-axis shapes".format(
+                        example_name
+                    ))
+                    if example_name != "flax_nnx_mlp_sharded":
+                        require('"name": "data"' in html, "{} lacks data-axis shapes".format(
+                            example_name
+                        ))
         print("PASS: example {}".format(example_name))
 
 
@@ -247,7 +266,10 @@ def main():
     if distributed_apis_available(nnx):
         smoke_distributed(nnx)
         if args.examples_dir is not None:
-            smoke_distributed_examples(args.examples_dir.resolve())
+            if version_at_least("flax", (0, 12)):
+                smoke_distributed_examples(args.examples_dir.resolve())
+            else:
+                print("SKIP: website examples use the current Flax 0.12 sharding style")
     elif args.require_distributed:
         raise AssertionError("This stack lacks the distributed JAX/NNX APIs")
     else:
