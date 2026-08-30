@@ -358,9 +358,16 @@ def _dump_hlo_stages(lowered):
         return not any(x in b for x in ("buffer-assignment", "live-range", "memory-usage"))
 
     candidates = [p for p in sorted(glob.glob(os.path.join(dump_dir, "*.txt"))) if is_module(p)]
+    pass_candidates = [
+        path for path in candidates
+        if "before_optimizations" not in os.path.basename(path)
+        and "after_optimizations" not in os.path.basename(path)
+    ]
     with_coll = [p for p in candidates if coll.search(open(p).read())]
     if with_coll:
         rendered = with_coll[0]
+    elif pass_candidates:
+        rendered = pass_candidates[-1]
     elif candidates:
         rendered = candidates[-1]
     else:

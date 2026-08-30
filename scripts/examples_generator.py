@@ -24,6 +24,7 @@ from jaxviz import trace_model
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = PROJECT_ROOT / "examples"
 OUTPUT_DIR = PROJECT_ROOT / "docs" / "examples"
+DEFAULT_VIEWS = ("global", "per_device")
 METADATA_VARS = {
     "code_contents",
     "description",
@@ -173,7 +174,8 @@ def generate_example(path, selected_views=None):
     else:
         example_args = (getattr(module, "example_input"),)
 
-    views = tuple(getattr(module, "views", ("global",)))
+    configured_views = tuple(getattr(module, "views", DEFAULT_VIEWS))
+    views = configured_views
     if selected_views:
         views = tuple(view for view in views if view in selected_views)
     if not views:
@@ -184,9 +186,14 @@ def generate_example(path, selected_views=None):
     title = example_title(path, module)
     output_paths = []
 
+    if len(configured_views) > 1:
+        legacy_output = OUTPUT_DIR / f"{path.stem}.html"
+        if legacy_output.exists():
+            legacy_output.unlink()
+
     with trace_context:
         for view in views:
-            suffix = f"_{view}" if len(getattr(module, "views", ("global",))) > 1 else ""
+            suffix = f"_{view}" if len(configured_views) > 1 else ""
             output_path = OUTPUT_DIR / f"{path.stem}{suffix}.html"
             print(f"Generating {path.stem} ({view})...")
             graph_html = trace_model(

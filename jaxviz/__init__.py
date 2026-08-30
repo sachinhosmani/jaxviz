@@ -71,6 +71,23 @@ def _lower_for_hlo(fn, example_args):
 
         return jax.jit(forward).lower(state, *example_args)
 
+    try:
+        import equinox as eqx
+    except ImportError:
+        eqx = None
+
+    if eqx is not None and isinstance(fn, eqx.Module):
+        from .adapters.equinox import named_scopes
+
+        state, static = eqx.partition(fn, eqx.is_array)
+
+        def forward(state, *args):
+            model = eqx.combine(state, static)
+            with named_scopes(model):
+                return model(*args)
+
+        return jax.jit(forward).lower(state, *example_args)
+
     with _module_scope_context(fn):
         return jax.jit(fn).lower(*example_args)
 
@@ -87,6 +104,19 @@ def _global_jaxpr_for_hlo(fn, example_args):
 
         def forward(state, *args):
             return nnx.merge(graphdef, state)(*args)
+
+        return jax.make_jaxpr(forward)(state, *example_args)
+
+    try:
+        import equinox as eqx
+    except ImportError:
+        eqx = None
+
+    if eqx is not None and isinstance(fn, eqx.Module):
+        state, static = eqx.partition(fn, eqx.is_array)
+
+        def forward(state, *args):
+            return eqx.combine(state, static)(*args)
 
         return jax.make_jaxpr(forward)(state, *example_args)
 
