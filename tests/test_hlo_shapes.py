@@ -1,202 +1,137 @@
+"""Contract for the per-device view.
+
+The view draws the final compiled module -- the code that actually runs. Every
+edge carries the shape its instruction states, labelled the same way the traced
+view labels its own edges. Nothing is recovered from an earlier compilation
+stage and no module hierarchy is reconstructed.
+"""
+import re
+
 import jax
 import jax.numpy as jnp
+import pytest
 
-from jaxviz._module_scopes import ModuleInvocation, module_scope_name
 from jaxviz.enums import NodeType
 from jaxviz.hlo_to_graph import (
-    _assign_value_module_paths,
-    _fallback_global_shape,
-    _jaxpr_global_shape_index,
-    _module_path_from_op_name,
-    _shape_info,
+    _hlo_shape_to_dims,
+    _label_for,
+    _parse_module,
+    _parse_operands,
+    build_hlo_graph,
 )
 
 
-def _graph_node(node_type, *targets):
-    return {
-        "node_type": node_type.value,
-        "edges": [{"target": target} for target in targets],
-    }
+NEWER_SHARDING_API = all(
+    hasattr(jax, name) for name in ("make_mesh", "set_mesh", "P")
+) and hasattr(jax.sharding, "AxisType")
 
 
-def test_shape_info_identifies_partitioned_dimensions():
-    assert _shape_info([3, 8, 512], [3, 32, 1024]) == {
-        "global": [3, 32, 1024],
-        "local": [3, 8, 512],
-        "partitions": [1, 4, 2],
-        "axes": None,
-        "status": "verified",
-    }
+# --------------------------------------------------------------------------
+# Edge labels are just the shape, as in the traced view
+# --------------------------------------------------------------------------
+def test_edge_label_is_the_stated_shape():
+    assert _hlo_shape_to_dims("f32[16,8]{1,0}") == "(16, 8)"
+    assert _hlo_shape_to_dims("f32[]") == "( )"
 
 
-def test_shape_info_preserves_unavailable_global_shape():
-    assert _shape_info([3, 8, 512], None) == {
-        "global": None,
-        "local": [3, 8, 512],
-        "partitions": None,
-        "axes": None,
-        "status": "unavailable",
-    }
-
-
-def test_shape_info_rejects_inconsistent_shapes():
-    assert _shape_info([3, 7], [3, 32])["status"] == "unavailable"
-
-
-def test_shape_info_maps_partitioned_dimensions_to_mesh_axes():
-    info = _shape_info(
-        [3, 8, 512],
-        [3, 32, 1024],
-        {"data": 4, "model": 2},
+# --------------------------------------------------------------------------
+# Both HLO text dialects parse: names with and without a leading '%'
+# --------------------------------------------------------------------------
+def test_module_parses_names_written_without_a_percent_prefix():
+    text = (
+        "HloModule m\n"
+        "\n"
+        "ENTRY main.5 {\n"
+        "  Arg_0.1 = f32[8,16]{1,0} parameter(0)\n"
+        "  ROOT tanh.4 = f32[8,16]{1,0} tanh(Arg_0.1)\n"
+        "}\n"
     )
+    computations, entry = _parse_module(text)
+    assert entry.name == "main.5"
+    assert [i.opcode for i in entry.instructions] == ["parameter", "tanh"]
+    assert entry.instructions[1].operands == ["Arg_0.1"]
 
-    assert info["axes"] == [
-        [],
-        [{"name": "data", "size": 4}],
-        [{"name": "model", "size": 2}],
+
+def test_module_parses_names_written_with_a_percent_prefix():
+    text = (
+        "HloModule m\n"
+        "\n"
+        "%fused_computation (p: f32[8]) -> f32[8] {\n"
+        "  %p = f32[8]{0} parameter(0)\n"
+        "  ROOT %t = f32[8]{0} tanh(%p)\n"
+        "}\n"
+        "\n"
+        "ENTRY %main (a: f32[8]) -> f32[8] {\n"
+        "  %a = f32[8]{0} parameter(0)\n"
+        "  ROOT %f = f32[8]{0} fusion(%a), kind=kLoop, calls=%fused_computation\n"
+        "}\n"
+    )
+    computations, entry = _parse_module(text)
+    assert entry.name == "main"
+    assert "fused_computation" in computations
+    assert entry.instructions[1].calls == ["fused_computation"]
+
+
+def test_a_computation_closing_the_file_is_still_recorded():
+    text = "HloModule m\n\nENTRY main {\n  ROOT %a = f32[] constant(1)\n}"
+    _, entry = _parse_module(text)
+    assert entry.name == "main"
+
+
+def test_literal_arguments_are_not_operands():
+    assert _parse_operands("0") == []
+    assert _parse_operands("%a, %b") == ["a", "b"]
+    assert _parse_operands("a, b") == ["a", "b"]
+
+
+def test_a_fusion_is_named_for_the_operation_it_was_built_from():
+    computations, entry = _parse_module(
+        "HloModule m\n"
+        "\n"
+        "ENTRY main {\n"
+        '  ROOT %f = f32[8]{0} fusion(%a), calls=%c, metadata={op_name="jit(m)/dot_general[x=1]"}\n'
+        "}\n"
+    )
+    assert _label_for(entry.instructions[0]) == "dot_general"
+
+
+# --------------------------------------------------------------------------
+# End to end: nothing is shown that the compiled module does not state
+# --------------------------------------------------------------------------
+@pytest.mark.skipif(not NEWER_SHARDING_API,
+                    reason="needs the explicit-sharding APIs")
+def test_compiled_view_shows_collectives_and_only_stated_global_shapes():
+    if len(jax.devices()) < 4:
+        pytest.skip("needs at least four devices")
+
+    explicit = jax.sharding.AxisType.Explicit
+    mesh = jax.make_mesh((1, 4), ("data", "model"),
+                         axis_types=(explicit, explicit))
+
+    def model(x, w1, w2):
+        hidden = jnp.tanh(jnp.dot(x, w1))
+        return jnp.dot(hidden, w2, out_sharding=jax.P("data", None))
+
+    with jax.set_mesh(mesh):
+        x = jax.device_put(jnp.ones((8, 16)), jax.P("data", None))
+        w1 = jax.device_put(jnp.ones((16, 32)), jax.P(None, "model"))
+        w2 = jax.device_put(jnp.ones((32, 16)), jax.P("model", None))
+        lowered = jax.jit(model).lower(x, w1, w2)
+        blobs = build_hlo_graph(lowered, mesh_shape=dict(mesh.shape))
+
+    adjacency = blobs["adj_list"]
+
+    collectives = [
+        node for node, data in adjacency.items()
+        if data["node_type"] == NodeType.COLLECTIVE.value
     ]
+    assert collectives, "the row-parallel multiply needs an all-reduce"
 
-
-def test_shape_info_omits_ambiguous_mesh_axis_mapping():
-    info = _shape_info([8, 8], [16, 16], {"x": 2, "y": 2})
-
-    assert info["axes"] is None
-
-
-def test_jaxpr_fallback_recovers_unique_global_shape():
-    assert _fallback_global_shape(
-        [8, 16],
-        {(16, 64)},
-        {"data": 2, "model": 4},
-    ) == [16, 64]
-
-
-def test_jaxpr_fallback_rejects_ambiguous_axis_mapping():
-    assert _fallback_global_shape(
-        [8, 8],
-        {(16, 16)},
-        {"x": 2, "y": 2},
-    ) is None
-
-
-def test_jaxpr_fallback_rejects_multiple_matching_shapes():
-    assert _fallback_global_shape(
-        [8, 16],
-        {(16, 64), (32, 32)},
-        {"data": 2, "model": 4},
-    ) is None
-
-
-def test_jaxpr_fallback_ignores_incompatible_global_candidates():
-    assert _fallback_global_shape(
-        [8, 16],
-        {(16, 64), (16, 32)},
-        {"data": 2, "model": 4},
-    ) == [16, 64]
-
-
-def test_jaxpr_global_shape_index_reads_logical_output_shape():
-    def double_width(value):
-        return jnp.concatenate((value, value), axis=1)
-
-    closed_jaxpr = jax.make_jaxpr(double_width)(jnp.ones((8, 16)))
-    indexed_shapes = {
-        shape
-        for shapes in _jaxpr_global_shape_index(closed_jaxpr).values()
-        for shape in shapes
-    }
-
-    assert (8, 32) in indexed_shapes
-
-
-def test_module_path_reads_deep_tagged_scopes_from_every_provenance():
-    first = "/".join([
-        "jit(forward)",
-        module_scope_name("Model", 1),
-        module_scope_name("block", 1),
-        module_scope_name("attention", 1),
-        "vmap()",
-        "transpose",
-    ])
-    second = "/".join([
-        "jit(forward)",
-        module_scope_name("Model", 1),
-        module_scope_name("block", 1),
-        module_scope_name("attention", 1),
-        "reshape",
-    ])
-
-    assert _module_path_from_op_name(first + ";" + second) == [
-        ModuleInvocation("Model", 1),
-        ModuleInvocation("block", 1),
-        ModuleInvocation("attention", 1),
-    ]
-
-
-def test_module_path_keeps_only_unambiguous_common_ancestry():
-    op_name = (
-        f"jit(forward)/{module_scope_name('Model', 1)}/"
-        f"{module_scope_name('left', 1)}/add;"
-        f"jit(forward)/{module_scope_name('Model', 1)}/"
-        f"{module_scope_name('right', 1)}/add"
+    # No module hierarchy, and every edge carries a plain shape label.
+    assert blobs["module_info"] == {} or all(
+        info.get("type") for info in blobs["module_info"].values()
     )
-
-    assert _module_path_from_op_name(op_name) == [ModuleInvocation("Model", 1)]
-
-
-def test_module_path_rejects_partially_unattributed_provenance():
-    op_name = (
-        f"jit(forward)/{module_scope_name('Model', 1)}/"
-        f"{module_scope_name('attention', 1)}/transpose;"
-        "jit(forward)/transpose"
-    )
-
-    assert _module_path_from_op_name(op_name) == []
-
-
-def test_value_nodes_follow_their_only_consuming_module():
-    model_path = [ModuleInvocation("MLP", 1)]
-    adj_list = {
-        "constant": _graph_node(NodeType.CONSTANT, "maximum"),
-        "maximum": _graph_node(NodeType.OPERATION),
-    }
-    node_modpath = {"constant": [], "maximum": model_path}
-
-    _assign_value_module_paths(adj_list, node_modpath)
-
-    assert node_modpath["constant"] == model_path
-
-
-def test_shared_values_use_their_consumers_common_module():
-    model = ModuleInvocation("Model", 1)
-    adj_list = {
-        "parameter": _graph_node(NodeType.PARAMETER, "left_op", "right_op"),
-        "left_op": _graph_node(NodeType.OPERATION),
-        "right_op": _graph_node(NodeType.OPERATION),
-    }
-    node_modpath = {
-        "parameter": [],
-        "left_op": [model, ModuleInvocation("left", 1)],
-        "right_op": [model, ModuleInvocation("right", 1)],
-    }
-
-    _assign_value_module_paths(adj_list, node_modpath)
-
-    assert node_modpath["parameter"] == [model]
-
-
-def test_value_nodes_stay_at_root_when_any_consumer_is_at_root():
-    adj_list = {
-        "constant": _graph_node(NodeType.CONSTANT, "module_op", "root_op"),
-        "module_op": _graph_node(NodeType.OPERATION),
-        "root_op": _graph_node(NodeType.OPERATION),
-    }
-    node_modpath = {
-        "constant": [],
-        "module_op": [ModuleInvocation("MLP", 1)],
-        "root_op": [],
-    }
-
-    _assign_value_module_paths(adj_list, node_modpath)
-
-    assert node_modpath["constant"] == []
+    for data in adjacency.values():
+        for edge in data["edges"]:
+            assert "shape_info" not in edge
+            assert re.fullmatch(r"\(.*\)", edge["dims"])

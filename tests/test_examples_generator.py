@@ -4,7 +4,7 @@ import re
 from types import SimpleNamespace
 
 from jaxviz.render import _css_size
-from scripts.examples_generator import build_display_code
+from scripts.examples_generator import build_display_code, DEFAULT_VIEWS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +18,10 @@ DISTRIBUTED_EXAMPLES = (
 def test_css_size_preserves_css_values():
     assert _css_size(800) == "800px"
     assert _css_size("100%") == "100%"
+
+
+def test_examples_default_to_global_and_per_device_views():
+    assert DEFAULT_VIEWS == ("global", "per_device")
 
 
 def test_build_display_code_removes_metadata_and_adds_trace_call(tmp_path):
@@ -84,20 +88,65 @@ def test_distributed_examples_use_idiomatic_model_code():
     assert "def split_heads" not in attention
 
 
-def test_distributed_website_pages_contain_real_partitioning():
+def test_distributed_website_pages_show_the_communication():
+    """Every distributed example must show the collectives the compiler added,
+    and must not carry any of the two-shape partitioning data the per-device
+    view no longer reports."""
     for name in DISTRIBUTED_EXAMPLES:
         html = (
             PROJECT_ROOT / "docs" / "examples" / f"{name}_per_device.html"
         ).read_text()
-        assert '"status": "verified"' in html
-        assert '"name": "model"' in html
         assert "all-reduce" in html
+        assert '"node_type": "Collective"' in html
+        # the JSON key, not the frontend code that would render it
+        assert '"shape_info":' not in html
 
-    for name in DISTRIBUTED_EXAMPLES[1:]:
-        html = (
-            PROJECT_ROOT / "docs" / "examples" / f"{name}_per_device.html"
-        ).read_text()
-        assert '"name": "data"' in html
+
+def test_transformer_example_has_independently_collapsible_blocks():
+    html = (
+        PROJECT_ROOT / "docs" / "examples" /
+        "flax_nnx_transformer_encoder_global.html"
+    ).read_text()
+
+    def embedded_json(name):
+        match = re.search(rf"^\s*const {name} = (.*);$", html, re.MULTILINE)
+        assert match is not None
+        return json.loads(match.group(1))
+
+    labels = embedded_json("graph_node_display_names")
+    ancestors = embedded_json("ancestor_map")
+    modules = embedded_json("parent_module_to_depth")
+    block_names = {f"block{index}" for index in range(4)}
+    blocks = {
+        module for module in modules
+        if labels[module] in block_names
+    }
+    attention_modules = {
+        module for module in modules
+        if labels[module] == "attention"
+    }
+    feed_forward_modules = {
+        module for module in modules
+        if labels[module] == "feed_forward"
+    }
+
+    assert len(blocks) == 4
+    assert len({ancestors[block] for block in blocks}) == 1
+    assert {ancestors[module] for module in attention_modules} == blocks
+    assert {ancestors[module] for module in feed_forward_modules} == blocks
+    assert "const collapse_modules_after_depth = 1;" in html
+
+
+def test_every_example_has_global_and_per_device_pages():
+    for source_path in sorted((PROJECT_ROOT / "examples").glob("*.py")):
+        if source_path.name == "__init__.py":
+            continue
+        for view in DEFAULT_VIEWS:
+            output_path = (
+                PROJECT_ROOT / "docs" / "examples" /
+                f"{source_path.stem}_{view}.html"
+            )
+            assert output_path.exists(), output_path.name
 
 
 def test_every_generated_module_collapse_is_acyclic():
