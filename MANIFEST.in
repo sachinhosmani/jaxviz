@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include NOTICE.txt
+include requirements.txt
+recursive-include jaxviz/assets *.css *.js
+recursive-include jaxviz/templates *.html
+global-exclude *.py[cod]
