@@ -202,7 +202,17 @@
             <div class="model-list">
                 <article class="model">
                     <div>
-                        <h3>Tensor-parallel MLP</h3>
+                        <h3>Tensor-parallel MLP (plain JAX)</h3>
+                        <p class="description">The smallest model that needs communication: one matrix split by columns, the next by rows.</p>
+                    </div>
+                    <div class="links">
+                        <a href="examples/tensor_parallel_mlp_global.html">Global</a>
+                        <a href="examples/tensor_parallel_mlp_per_device.html">Per-device</a>
+                    </div>
+                </article>
+                <article class="model">
+                    <div>
+                        <h3>Tensor-parallel MLP (Flax NNX)</h3>
                         <p class="description">Column- and row-parallel linear layers across one model axis.</p>
                     </div>
                     <div class="links">

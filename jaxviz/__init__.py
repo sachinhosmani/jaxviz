@@ -53,47 +53,12 @@ def _module_scope_context(fn):
 def _lower_for_hlo(fn, example_args):
     """Lower fn for HLO extraction. For a Flax NNX module the sharded weights must
     be passed as *arguments* (not captured), otherwise they are constant-folded,
-    their sharding is lost, and no collectives are inserted."""
-    try:
-        from flax import nnx
-    except ImportError:
-        nnx = None
+    their sharding is lost, and no collectives are inserted.
 
-    if nnx is not None and isinstance(fn, nnx.Module):
-        from .adapters.nnx import named_scopes
-
-        graphdef, state = nnx.split(fn)
-
-        def forward(state, *args):
-            model = nnx.merge(graphdef, state)
-            with named_scopes(model):
-                return model(*args)
-
-        return jax.jit(forward).lower(state, *example_args)
-
-    try:
-        import equinox as eqx
-    except ImportError:
-        eqx = None
-
-    if eqx is not None and isinstance(fn, eqx.Module):
-        from .adapters.equinox import named_scopes
-
-        state, static = eqx.partition(fn, eqx.is_array)
-
-        def forward(state, *args):
-            model = eqx.combine(state, static)
-            with named_scopes(model):
-                return model(*args)
-
-        return jax.jit(forward).lower(state, *example_args)
-
-    with _module_scope_context(fn):
-        return jax.jit(fn).lower(*example_args)
-
-
-def _global_jaxpr_for_hlo(fn, example_args):
-    """Trace the unpartitioned program for partitioner-independent shape data."""
+    No module scopes are pushed here: the per-device view draws the compiled
+    program and never reconstructs a module hierarchy, so tagging the trace would
+    only clutter the compiler's own operation names.
+    """
     try:
         from flax import nnx
     except ImportError:
@@ -105,7 +70,7 @@ def _global_jaxpr_for_hlo(fn, example_args):
         def forward(state, *args):
             return nnx.merge(graphdef, state)(*args)
 
-        return jax.make_jaxpr(forward)(state, *example_args)
+        return jax.jit(forward).lower(state, *example_args)
 
     try:
         import equinox as eqx
@@ -118,28 +83,9 @@ def _global_jaxpr_for_hlo(fn, example_args):
         def forward(state, *args):
             return eqx.combine(state, static)(*args)
 
-        return jax.make_jaxpr(forward)(state, *example_args)
+        return jax.jit(forward).lower(state, *example_args)
 
-    return jax.make_jaxpr(fn)(*example_args)
-
-
-def _active_mesh_shape():
-    get_mesh = getattr(jax.sharding, "get_mesh", None)
-    if get_mesh is not None:
-        try:
-            return dict(get_mesh().shape)
-        except (AttributeError, RuntimeError):
-            pass
-
-    get_abstract_mesh = getattr(jax.sharding, "get_abstract_mesh", None)
-    if get_abstract_mesh is not None:
-        try:
-            shape = dict(get_abstract_mesh().shape)
-            return shape or None
-        except (AttributeError, RuntimeError):
-            pass
-
-    return None
+    return jax.jit(fn).lower(*example_args)
 
 
 def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_depth=1,
@@ -152,12 +98,17 @@ def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_dept
             nesting automatically; for Flax Linen pass ``lambda x: model.apply(params, x)``;
             any callable works and is traced with ``jax.make_jaxpr``.
         *example_args: Example inputs (arrays / pytrees) with the right shapes.
-        view: Which program view to render. ``"global"`` (default) shows the
-            jaxpr as written, using logical/global tensor shapes before partitioning.
-            ``"per_device"`` shows the post-partitioning HLO executed by each
-            device, including local tensor shapes and compiler-inserted collectives
-            (all-reduce/all-gather/...). Trace under a mesh so there is sharding for
-            the compiler to act on.
+        view: Which program view to render.
+
+            ``"global"`` (default) is the model as written: your operations, your
+            module hierarchy, and global tensor shapes. It contains no collectives,
+            because communication does not exist in the program you wrote.
+
+            ``"per_device"`` is the compiled program as it runs on one device:
+            the shapes each device works with, real compiler-inserted collectives,
+            and fusions as expandable containers. It has no module hierarchy --
+            that does not survive compilation. Trace under a mesh so there is
+            sharding for the compiler to act on.
         collapse_modules_after_depth: Nesting depth beyond which modules start collapsed.
         height, width: Rendered graph size in pixels.
         export_format: None (inline display) or one of 'html'/'png'/'svg'.
@@ -175,13 +126,12 @@ def trace_model(fn, *example_args, view=VIEW_GLOBAL, collapse_modules_after_dept
         export_format = validate_export_format(export_format)
 
     if view == VIEW_PER_DEVICE:
-        global_jaxpr = _global_jaxpr_for_hlo(fn, example_args)
         lowered = _lower_for_hlo(fn, example_args)
-        blobs = build_hlo_graph(
-            lowered,
-            mesh_shape=_active_mesh_shape(),
-            global_jaxpr=global_jaxpr,
-        )
+        blobs = build_hlo_graph(lowered)
+        # This view has no module nesting for a depth to refer to. Its containers
+        # are fusions -- an implementation detail -- so they all start closed and
+        # the reader opens the ones they care about.
+        collapse_modules_after_depth = 0
     else:
         with _module_scope_context(fn):
             closed_jaxpr = jax.make_jaxpr(fn)(*example_args)

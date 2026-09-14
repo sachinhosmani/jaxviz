@@ -66,6 +66,7 @@
         .node_${unique_id} rect.failed_${unique_id} { fill: rgb(224 15 15); }
         .node_${unique_id} rect.module_${unique_id} { fill: #8BDEDB; }
         .node_${unique_id} rect.operation_${unique_id} { fill: #FEBC5A; }
+        .node_${unique_id} rect.collective_${unique_id} { fill: #EF6F6C; }
 
         .node_${unique_id} ellipse.input_${unique_id} { fill: #FF9AFF; }
         .node_${unique_id} ellipse.constant_${unique_id} { fill: rgb(235 235 235); }
@@ -1198,6 +1199,7 @@
                 if (nodeData.node_type === "Output") return "#74e071";
                 if (nodeData.node_type === "Parameter") return "#B9CCF3";
                 if (repeat_containers.has(nodeName)) return REPEAT_CONTAINER_COLOR;
+                if (nodeData.node_type === "Collective") return "#EF6F6C";
                 if (nodeData.node_type === "Module") return "#8BDEDB";
                 if (nodeData.node_type === "Operation") return "#FEBC5A";
             }
@@ -2019,8 +2021,9 @@
                 .attr("height", nodeData.height)
                 .attr("x", -nodeData.width / 2)
                 .attr("y", -nodeData.height / 2)
-                .attr("class", function() { 
+                .attr("class", function() {
                     if ((adj_list[nodeName] && adj_list[nodeName].failed) || containersWithFailedNodes.has(nodeName)) return "failed_${unique_id}";
+                    if (adj_list[nodeName] && adj_list[nodeName].node_type === "Collective" && !collapsedContainers.has(nodeName)) return "collective_${unique_id}";
                     return ((adj_list[nodeName] && adj_list[nodeName].node_type === "Module") || (collapsedContainers.has(nodeName))) ? "module_${unique_id}" : "operation_${unique_id}";
                 });
             }

@@ -8,6 +8,7 @@ class NodeType(Enum):
     OUTPUT = "Output"
     CONSTANT = "Constant"
     PARAMETER = "Parameter"
+    COLLECTIVE = "Collective"
 
 
 class ExportFormat(Enum):
