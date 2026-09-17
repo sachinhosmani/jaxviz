@@ -9,96 +9,36 @@ visualization as HTML, PNG, or SVG.
 
 ### Interactive graph with drag and zoom support
 
-<!--
-GIF PLACEHOLDER
-Suggested file: docs/assets/interactive-graph.gif
-
-![](docs/assets/interactive-graph.gif)
--->
+![](docs/assets/drag.gif)
 
 --------
 
 ### Collapsible graph for hierarchical modules
 
-<!--
-GIF PLACEHOLDER
-Suggested file: docs/assets/collapsible-graph.gif
-
-![](docs/assets/collapsible-graph.gif)
--->
+![](docs/assets/expand.gif)
 
 --------
 
-### Global and per-device program views
+### Global and per-device (compiled) program views
 
 The **global view** shows the model as written: your operations, your module
 hierarchy, and whole tensor shapes. The **per-device view** shows the compiled
 program that actually runs on one device — the shapes each device works with and
 compiler-inserted communication such as `all-reduce`.
 
-<!--
-GIF PLACEHOLDER
-Suggested file: docs/assets/global-per-device.gif
-Show the same model switching between global and per-device pages.
-
-![](docs/assets/global-per-device.gif)
--->
+![](docs/assets/per_device.png)
 
 --------
 
-### See where your model pays for communication
+### Click nodes to inspect arguments
 
-Collectives such as `all-reduce` do not exist in the program you wrote — the
-compiler inserts them. The per-device view draws them as their own nodes,
-shaded apart from ordinary operations, wired exactly where the compiler put
-them.
-
-<!--
-GIF PLACEHOLDER
-Suggested file: docs/assets/collectives.gif
-
-![](docs/assets/collectives.gif)
--->
-
---------
-
-### Open up a fused kernel
-
-The compiler merges operations into single kernels. Each one is drawn as a
-container you can expand to see the operations inside, with edges reconnecting
-to them.
-
-<!--
-GIF PLACEHOLDER
-Suggested file: docs/assets/fusion-expand.gif
-
-![](docs/assets/fusion-expand.gif)
--->
-
---------
-
-### Click nodes to inspect arguments and operation attributes
-
-<!--
-SCREENSHOT PLACEHOLDER
-Suggested file: docs/assets/info-popup.png
-
-![](docs/assets/info-popup.png)
--->
+![](docs/assets/info.png)
 
 --------
 
 ## Examples
 
-- Start with the basic [Flax NNX MLP](examples/flax_nnx_mlp.py).
-- See the smallest model that needs communication with the
-  [tensor-parallel MLP](examples/tensor_parallel_mlp.py), in plain JAX.
-- Learn one-axis tensor parallelism in Flax with the
-  [sharded MLP](examples/flax_nnx_mlp_sharded.py).
-- Combine data and tensor parallelism with the
-  [2D-parallel MLP](examples/flax_nnx_mlp_2d_parallel.py).
-- Follow sharding through multi-dimensional tensors with
-  [head-parallel self-attention](examples/flax_nnx_head_parallel_attention.py).
+Find several examples viewable in the browser [here](https://sachinhosmani.github.io/jaxviz/)
 
 ## ⚙️ Usage
 
